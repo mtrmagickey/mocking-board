@@ -1,0 +1,274 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    height: 100%;
+    overflow: hidden;
+}
+h2 {
+    font-family: 'Old Standard TT', serif;
+}
+.app-container {
+    display: flex;
+    height: 100vh;
+}
+.sidebar {
+    width: 250px;
+    color: black;
+    padding: 0;
+    overflow-y: auto;
+    transition: width 0.3s, opacity 0.3s;
+}
+.sidebar.collapsed {
+    width: 0;
+    opacity: 0;
+}
+.sidebar h2, .sidebar .element-button {
+    display: block;
+    opacity: 1;
+    transition: opacity 0.3s;
+    text-align: center;
+}
+.sidebar .element-button {
+    width: 80%;
+    margin: 10px auto;
+}
+.sidebar.collapsed h2, .sidebar.collapsed .element-button {
+    opacity: 0;
+}
+.canvas-container {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    transition: margin-left 0.3s;
+}
+.canvas {
+    position: relative;
+    background-color: #ffffff;
+    overflow: auto;
+    transition: background-color 0.3s;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+.element {
+    position: absolute;
+    background-color: transparent;
+    border: none;
+    padding: 10px;
+    cursor: move;
+    user-select: none;
+    min-width: 100px;
+    min-height: 50px;
+    z-index: 2;
+    box-sizing: border-box;
+}
+.element.locked .resize-handle, .element.locked .text-format-toolbar {
+    display: none;
+}
+.element img, .element video, .element audio, .element iframe, .element svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    padding: 5px;
+    box-sizing: border-box;
+}
+.element video, .element audio, .element iframe {
+    pointer-events: auto;
+}
+.element-button {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+.element-button:hover {
+    background-color: #2980b9;
+}
+.toolbar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+    transition: opacity 0.3s;
+    z-index: 3;
+}
+.toolbar button {
+    padding: 5px 10px;
+    background-color: #34495e;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.toolbar button:hover {
+    opacity: 1;
+}
+.toolbar.collapsed {
+    opacity: 0.1;
+}
+.context-menu {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 5px;
+    z-index: 1000;
+}
+.context-menu button {
+    display: block;
+    width: 100%;
+    padding: 5px;
+    margin: 2px 0;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+}
+.context-menu button:hover {
+    background-color: #f0f0f0;
+}
+.resize-handle {
+    width: 10px;
+    height: 10px;
+    background-color: #3498db;
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    cursor: se-resize;
+}
+.editable {
+    min-height: 20px;
+    padding: 5px;
+    margin: 5px 0;
+}
+.editable:focus {
+    outline: none;
+    border-color: #3498db;
+}
+.widget {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    opacity: 0.1;
+    transition: opacity 0.3s;
+    z-index: 3;
+}
+.widget:hover {
+    opacity: 1;
+}
+.widget img {
+    width: 100px;
+    height: auto;
+    cursor: pointer;
+}
+.popup {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 20px;
+    background-color: white;
+    border: 1px solid #ccc;
+    z-index: 1000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+.popup input[type="text"], .popup input[type="number"], .popup select {
+    margin: 5px 0;
+    padding: 5px;
+    width: calc(100% - 10px);
+    box-sizing: border-box;
+}
+.popup button {
+    padding: 10px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.popup button:hover {
+    background-color: #2980b9;
+}
+.popup label {
+    display: block;
+    margin: 5px 0;
+}
+.popup input[type="color"] {
+    margin-top: 5px;
+}
+.popup .cancel-btn {
+    margin-left: 10px;
+    background-color: #ccc;
+    color: black;
+}
+.text-format-toolbar {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.text-format-toolbar button {
+    padding: 5px;
+    background-color: #ccc;
+    border: none;
+    cursor: pointer;
+}
+.text-format-toolbar button:hover {
+    background-color: #bbb;
+}
+.grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background-size: 20px 20px;
+    background-image: linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px);
+    display: none;  /* Initially hidden */
+}
+@keyframes move1 {
+    from { transform: translate(0, 0); }
+    to { transform: translate(100px, 100px); }
+}
+@keyframes move2 {
+    from { transform: translate(0, 0); }
+    to { transform: translate(200px, 200px); }
+}
+@keyframes move3 {
+    from { transform: translate(0, 0); }
+    to { transform: translate(300px, 300px); }
+}
+@keyframes scale1 {
+    from { transform: scale(1); }
+    to { transform: scale(1.2); }
+}
+@keyframes scale2 {
+    from { transform: scale(1); }
+    to { transform: scale(1.5); }
+}
+@keyframes scale3 {
+    from { transform: scale(1); }
+    to { transform: scale(2); }
+}
+@keyframes rotate1 {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(90deg); }
+}
+@keyframes rotate2 {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(180deg); }
+}
+@keyframes rotate3 {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

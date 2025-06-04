@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mocking Board</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <div id="sidebar" class="sidebar">
+            <h2>Elements</h2>
+            <button class="element-button" data-type="header">Header</button>
+            <button class="element-button" data-type="paragraph">Paragraph</button>
+            <button class="element-button" data-type="image">Image</button>
+            <button class="element-button" data-type="button">Button</button>
+            <button class="element-button" data-type="video">Video</button>
+            <button class="element-button" data-type="audio">Audio</button>
+            <button class="element-button" data-type="youtube">YouTube</button>
+            <button class="element-button" data-type="rectangle">Rectangle</button>
+            <button class="element-button" data-type="circle">Circle</button>
+            <button class="element-button" data-type="line">Line</button>
+            <button class="element-button" data-type="arrow">Arrow</button>
+            <button class="element-button" data-type="triangle">Triangle</button>
+            <button class="element-button" data-type="colorTransition">Color Transition</button>
+            <button class="element-button" data-type="colorGradient">Color Gradient</button>
+        </div>
+        <div id="canvas-container" class="canvas-container">
+            <div id="canvas" class="canvas">
+                <div id="grid" class="grid"></div>
+            </div>
+        </div>
+        <div id="toolbar" class="toolbar collapsed">
+            <button id="load-btn">Load</button>
+            <button id="clear-btn">Clear</button>
+            <button id="export-btn">Export</button>
+            <button id="toggle-sidebar-btn">Toggle Sidebar</button>
+            <button id="lock-btn">Lock</button>
+            <button id="background-btn">Background</button>
+            <button id="toggle-grid-btn">Toggle Grid</button>
+        </div>
+    </div>
+
+    <div id="contextMenu" class="context-menu">
+        <button id="changeColor">Change Color</button>
+        <button id="rotateElement">Rotate 5°</button>
+        <button id="rotate90Element">Rotate 90°</button>
+        <button id="changeLinkedMedia">Change Media</button>
+        <button id="fontSize">Change Font Size</button>
+        <button id="fontColor">Change Font Color</button>
+        <button id="textAlign">Text Align</button>
+        <button id="changeFont">Change Font</button>
+        <button id="makeTransparent">Make Transparent</button>
+        <button id="createColorTransition">Create Color Transition</button>
+        <button id="createColorGradient">Create Color Gradient</button>
+        <button id="createAnimation">Create Animation</button>
+        <button id="toggleLoop">Toggle Loop</button>
+        <button id="toggleBorder">Toggle Border</button>
+        <button id="moveForward">Move Forward</button>
+        <button id="moveBackward">Move Backward</button>
+        <button id="deleteElement">Delete</button>
+    </div>
+
+    <div id="color-popup" class="popup">
+        <label for="color-picker">Pick a color:</label>
+        <input type="color" id="color-picker">
+        <label for="hex-input">Hex Code:</label>
+        <input type="text" id="hex-input">
+        <label for="transparency-input">Transparency:</label>
+        <input type="range" id="transparency-input" min="0" max="100" value="0">
+        <button id="apply-color-btn">Apply</button>
+        <button class="cancel-btn" onclick="document.getElementById('color-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="media-popup" class="popup">
+        <label for="media-url-input">Media URL:</label>
+        <input type="text" id="media-url-input">
+        <label for="search-query-input">Search for images:</label>
+        <input type="text" id="search-query-input">
+        <button id="search-btn">Search</button>
+        <div id="search-results"></div>
+        <button id="apply-media-btn">Apply</button>
+        <button class="cancel-btn" onclick="document.getElementById('media-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="color-transition-popup" class="popup">
+        <label for="start-color">Start Color:</label>
+        <input type="color" id="start-color">
+        <label for="end-color">End Color:</label>
+        <input type="color" id="end-color">
+        <label for="transition-time">Transition Time (seconds):</label>
+        <input type="number" id="transition-time" min="1" value="5">
+        <button id="apply-transition-btn">Apply</button>
+        <button class="cancel-btn" onclick="document.getElementById('color-transition-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="color-gradient-popup" class="popup">
+        <label for="start-gradient-color">Start Color:</label>
+        <input type="color" id="start-gradient-color">
+        <label for="end-gradient-color">End Color:</label>
+        <input type="color" id="end-gradient-color">
+        <label for="gradient-direction">Gradient Direction:</label>
+        <select id="gradient-direction">
+            <option value="to right">To Right</option>
+            <option value="to left">To Left</option>
+            <option value="to bottom">To Bottom</option>
+            <option value="to top">To Top</option>
+        </select>
+        <button id="apply-gradient-btn">Apply</button>
+        <button class="cancel-btn" onclick="document.getElementById('color-gradient-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="animation-popup" class="popup">
+        <label for="animation-type">Animation Type:</label>
+        <select id="animation-type">
+            <option value="move">Move</option>
+            <option value="scale">Scale</option>
+            <option value="rotate">Rotate</option>
+        </select>
+        <label for="animation-preset">Animation Preset:</label>
+        <select id="animation-preset">
+            <option value="1">Preset 1</option>
+            <option value="2">Preset 2</option>
+            <option value="3">Preset 3</option>
+        </select>
+        <label for="animation-duration">Duration (seconds):</label>
+        <input type="number" id="animation-duration" min="1" value="5">
+        <button id="apply-animation-btn">Apply</button>
+        <button class="cancel-btn" onclick="document.getElementById('animation-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="widget" class="widget">
+        <a href="https://www.mtrmagickey.com"><img src="https://cdn.glitch.global/46455a7e-bf51-4247-a767-6f830731fb7e/mtrmk_badge.png?v=1720038381995" alt="MTR Magic Key"></a>
+    </div>
+
+    <input type="file" id="file-input" style="display: none;">
+
+    <script src="main.js"></script>
+    <script src="colorManagement.js"></script>
+    <script src="elementCreation.js"></script>
+    <script src="exportFunctionality.js"></script>
+</body>
+</html>
