@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 element.innerHTML = '<div class="editable" contenteditable="true"><div class="text-format-toolbar"></div><p>This is a paragraph.</p></div>';
                 break;
             case 'image':
-                element.innerHTML = '<img src="https://cdn.glitch.global/46455a7e-bf51-4247-a767-6f830731fb7e/Mocking-Board_logo.png" alt="Placeholder">';
+                element.innerHTML = '<img src="https://github.com/mtrmagickey/mocking-board/blob/main/Mocking-Board_logo.png?raw=true" alt="Placeholder">';
                 break;
             case 'button':
                 element.innerHTML = '<div class="editable" contenteditable="true"><button>Click me</button></div>';
