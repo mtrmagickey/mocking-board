@@ -640,6 +640,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (selectedElement._transitionIntervalId) {
                     clearInterval(selectedElement._transitionIntervalId);
                 }
+                // Remove any previous transition interval from all elements (defensive)
+                document.querySelectorAll('.element').forEach(el => {
+                    if (el !== selectedElement && el._transitionIntervalId && !document.body.contains(el)) {
+                        clearInterval(el._transitionIntervalId);
+                        el._transitionIntervalId = null;
+                    }
+                });
                 const intervalId = setInterval(() => {
                     if (!document.body.contains(selectedElement)) {
                         clearInterval(intervalId);
@@ -861,6 +868,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderThemeSwatches() {
         const swatches = themePopup.querySelector('#theme-swatches');
         swatches.innerHTML = '';
+        swatches.style.gap = '0'; // Remove parent gap
         colorThemes.forEach((theme, idx) => {
             const row = document.createElement('div');
             row.setAttribute('tabindex', '0');
@@ -870,8 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
             row.style.alignItems = 'center';
             row.style.cursor = 'pointer';
             row.style.outline = 'none';
-            row.style.gap = '4px'; // Reduced gap
-            row.style.padding = '2px 0'; // Reduced padding
+            row.style.gap = '4px';
+            row.style.padding = '2px 0';
             row.addEventListener('click', () => applyTheme(idx));
             row.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -882,7 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Palette preview bar
             const previewBar = document.createElement('div');
             previewBar.style.display = 'flex';
-            previewBar.style.height = '20px'; // Reduced height
+            previewBar.style.height = '18px'; // Even smaller
             previewBar.style.borderRadius = '4px';
             previewBar.style.overflow = 'hidden';
             previewBar.style.boxShadow = '0 0 0 1px #ccc';
@@ -902,10 +910,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Utility: get best contrast color (black or white) for a given bg
-    function getContrastYIQ(hexcolor) {
+    // Utility: get best contrast color (black or white) for a given bg (hex or rgb/rgba)
+    function getContrastYIQ(color) {
+        let hexcolor = color;
+        // Handle rgb/rgba
+        if (hexcolor.startsWith('rgb')) {
+            const rgb = hexcolor.match(/\d+/g);
+            if (rgb && rgb.length >= 3) {
+                const [r, g, b] = rgb;
+                const yiq = ((+r)*299+(+g)*587+(+b)*114)/1000;
+                return (yiq >= 128) ? '#111' : '#fff';
+            }
+            return '#111';
+        }
+        // Handle hex
         hexcolor = hexcolor.replace('#', '');
         if (hexcolor.length === 3) hexcolor = hexcolor.split('').map(x => x + x).join('');
+        if (hexcolor.length !== 6) return '#111';
         const r = parseInt(hexcolor.substr(0,2),16);
         const g = parseInt(hexcolor.substr(2,2),16);
         const b = parseInt(hexcolor.substr(4,2),16);
@@ -931,10 +952,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? theme.colors[(i + 1) % theme.colors.length]
                     : el.style.backgroundColor;
             el.style.backgroundColor = bgColor;
-            // --- Set text color for .editable and text children ---
-            const textEls = el.querySelectorAll('.editable, h1, h2, h3, h4, h5, h6, p, span');
+            // --- Set text color for all descendants ---
+            const allTextNodes = el.querySelectorAll('.editable, h1, h2, h3, h4, h5, h6, p, span, div, strong, em, b, i, u');
             const contrastColor = getContrastYIQ(bgColor);
-            textEls.forEach(txt => {
+            allTextNodes.forEach(txt => {
                 txt.style.color = contrastColor;
             });
             // --- Set SVG fill/stroke ---
