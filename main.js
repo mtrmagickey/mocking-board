@@ -1002,13 +1002,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
-            // Simple export: download canvas as HTML
-            const html = canvas.outerHTML;
-            const blob = new Blob([html], { type: 'text/html' });
+            // Export as JSON: serialize all elements and their properties
+            const elements = Array.from(canvas.querySelectorAll('.element')).map(el => {
+                // Get bounding rect relative to canvas
+                const rect = el.getBoundingClientRect();
+                const canvasRect = canvas.getBoundingClientRect();
+                // Serialize styles and content
+                return {
+                    type: el.getAttribute('data-type') || null,
+                    left: el.style.left,
+                    top: el.style.top,
+                    width: el.style.width,
+                    height: el.style.height,
+                    backgroundColor: el.style.backgroundColor,
+                    color: el.style.color,
+                    fontSize: el.style.fontSize,
+                    fontFamily: el.style.fontFamily,
+                    zIndex: el.style.zIndex,
+                    border: el.style.border,
+                    borderColor: el.style.borderColor,
+                    rotation: el.dataset.rotation || 0,
+                    innerHTML: el.innerHTML,
+                    dataset: { ...el.dataset },
+                };
+            });
+            const exportData = {
+                elements,
+                canvas: {
+                    background: canvas.style.background,
+                    width: canvas.style.width,
+                    height: canvas.style.height,
+                }
+            };
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'mocking-board-export.html';
+            a.download = 'mocking-board-export.json';
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {
