@@ -700,9 +700,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function setOffset(val) { offset = val; }
     function setSelected(el) { selectedElement = el; }
 
-    // Setup media drop and Unsplash search
-    setupMediaDrop(canvas, createImageElement, createVideoElement, createAudioElement);
-    setupUnsplashSearch(searchBtn, searchQueryInput, searchResults, mediaUrlInput);
+    // --- FIX: Remove broken setupMediaDrop/setupUnsplashSearch calls before DOMContentLoaded ---
+    // (They are already called after DOMContentLoaded with correct arguments)
+    // setupMediaDrop(canvas, createImageElement, createVideoElement, createAudioElement);
+    // setupUnsplashSearch(searchBtn, searchQueryInput, searchResults, mediaUrlInput);
 
     // --- Theme Selector ---
     // Add a button to open the theme selector popup
