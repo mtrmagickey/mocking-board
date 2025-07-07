@@ -889,4 +889,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial render
     renderThemeSwatches();
+
+    // Restore event listeners for load, clear, and export buttons
+    if (loadBtn) {
+        loadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (confirm('Clear the canvas? This cannot be undone.')) {
+                canvas.innerHTML = '';
+                saveState();
+            }
+        });
+    }
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            // Simple export: download canvas as HTML
+            const html = canvas.outerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mocking-board-export.html';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        });
+    }
 });
