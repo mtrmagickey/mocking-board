@@ -76,6 +76,31 @@ document.addEventListener('DOMContentLoaded', () => {
         colorGradientPopup.insertBefore(gradientTypeSelect, colorGradientPopup.firstChild);
     }
 
+    // --- Add gradient animation style selector if not present ---
+    let gradientAnimSelect = document.getElementById('gradient-anim-style');
+    if (!gradientAnimSelect && colorGradientPopup) {
+        gradientAnimSelect = document.createElement('select');
+        gradientAnimSelect.id = 'gradient-anim-style';
+        gradientAnimSelect.style.marginBottom = '8px';
+        gradientAnimSelect.setAttribute('aria-label', 'Gradient Animation Style');
+        [
+            { value: 'none', label: 'No Animation' },
+            { value: 'rotate', label: 'Rotate' },
+            { value: 'color-shift', label: 'Color Shift' }
+        ].forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            gradientAnimSelect.appendChild(option);
+        });
+        // Insert after gradient type selector
+        if (gradientTypeSelect && gradientTypeSelect.nextSibling) {
+            colorGradientPopup.insertBefore(gradientAnimSelect, gradientTypeSelect.nextSibling);
+        } else {
+            colorGradientPopup.insertBefore(gradientAnimSelect, colorGradientPopup.firstChild);
+        }
+    }
+
     let draggedElement = null;
     let offset = { x: 0, y: 0 };
     let selectedElement = null;
@@ -1080,30 +1105,61 @@ document.addEventListener('DOMContentLoaded', () => {
             const startColor = startGradientColorInput.value;
             const endColor = endGradientColorInput.value;
             const direction = gradientDirectionSelect.value || 'to right';
-            // --- Artistic gradient type support ---
             const gradientTypeSelect = document.getElementById('gradient-type');
             const gradientType = gradientTypeSelect ? gradientTypeSelect.value : 'linear';
+            const gradientAnimSelect = document.getElementById('gradient-anim-style');
+            const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
             let gradient;
+            let angleVal = 0;
+            // --- Clean up previous interval if any ---
+            if (selectedElement._gradientAnimInterval) {
+                clearInterval(selectedElement._gradientAnimInterval);
+                selectedElement._gradientAnimInterval = null;
+            }
             if (gradientType === 'radial') {
                 gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
             } else if (gradientType === 'conic') {
-                // For conic, use direction as angle if possible, fallback to 'from 0deg'
                 let angle = 'from 0deg';
                 if (direction && direction.match(/\d+deg/)) {
                     angle = `from ${direction}`;
                 }
                 gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
             } else {
-                // Default to linear
                 gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
             }
             selectedElement.style.background = gradient;
+            // --- Animate if needed ---
+            if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
+                angleVal = 0;
+                selectedElement._gradientAnimInterval = setInterval(() => {
+                    angleVal = (angleVal + 2) % 360;
+                    if (gradientType === 'conic') {
+                        selectedElement.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
+                    } else {
+                        selectedElement.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
+                    }
+                }, 50);
+            } else if (animStyle === 'color-shift') {
+                // Simple color shift: swap start/end every second
+                let isStart = true;
+                selectedElement._gradientAnimInterval = setInterval(() => {
+                    if (gradientType === 'radial') {
+                        selectedElement.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                    } else if (gradientType === 'conic') {
+                        selectedElement.style.background = `conic-gradient(from 0deg, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                    } else {
+                        selectedElement.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                    }
+                    isStart = !isStart;
+                }, 1000);
+            }
             // Store gradient info for export/undo/redo
             selectedElement.dataset.colorGradient = JSON.stringify({
                 startColor,
                 endColor,
                 direction,
-                gradientType
+                gradientType,
+                animStyle
             });
             saveState();
         }
