@@ -234,6 +234,10 @@ document.addEventListener('DOMContentLoaded', () => {
         element.style.height = '100px';
         element.style.backgroundColor = getRandomColor(); // Random background color from custom colors
 
+        // --- Assign data-type and unique data-id at creation ---
+        element.setAttribute('data-type', type);
+        element.setAttribute('data-id', 'el-' + Date.now() + '-' + Math.floor(Math.random() * 1000000));
+
         switch(type) {
             case 'header':
                 element.innerHTML = '<div class="editable" contenteditable="true"><div class="text-format-toolbar"></div><h2>Header</h2></div>';
