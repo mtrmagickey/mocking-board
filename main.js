@@ -152,6 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 element = createElementFromManager(type);
             }
             canvas.appendChild(element);
+            // --- Always open color selection popups for colorTransition and colorGradient ---
+            if (type === 'colorTransition') {
+                selectedElement = element;
+                openColorTransitionPopup();
+            } else if (type === 'colorGradient') {
+                selectedElement = element;
+                openColorGradientPopup();
+            }
             saveState();
         }
     });
@@ -792,8 +800,148 @@ document.addEventListener('DOMContentLoaded', () => {
         closeAnimationPopup();
     });
 
-    // --- On element removal, theme override, or undo/redo, always call clearAllIntervalsForElement(el) ---
-    // ...existing code...
+    // --- Restore all per-UID animations/intervals after state restoration ---
+    function restoreElementAnimations() {
+        const elements = canvas.querySelectorAll('.element');
+        elements.forEach(el => {
+            const uid = getElementUID(el);
+            // Restore color transition
+            if (el.dataset.colorTransition) {
+                try {
+                    const { startColor, endColor, transitionTime } = JSON.parse(el.dataset.colorTransition);
+                    if (colorTransitionIntervals.has(uid)) {
+                        clearInterval(colorTransitionIntervals.get(uid));
+                        colorTransitionIntervals.delete(uid);
+                    }
+                    let forward = true;
+                    const intervalId = setInterval(() => {
+                        if (!document.body.contains(el)) {
+                            clearInterval(intervalId);
+                            colorTransitionIntervals.delete(uid);
+                            return;
+                        }
+                        el.style.backgroundColor = forward ? endColor : startColor;
+                        forward = !forward;
+                    }, (parseFloat(transitionTime) || 2) * 1000);
+                    colorTransitionIntervals.set(uid, intervalId);
+                } catch {}
+            }
+            // Restore gradient animation
+            if (el.dataset.colorGradient) {
+                try {
+                    const { startColor, endColor, direction, gradientType, animStyle } = JSON.parse(el.dataset.colorGradient);
+                    if (gradientAnimIntervals.has(uid)) {
+                        clearInterval(gradientAnimIntervals.get(uid));
+                        gradientAnimIntervals.delete(uid);
+                    }
+                    let gradient;
+                    if (gradientType === 'radial') {
+                        gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
+                    } else if (gradientType === 'conic') {
+                        let angle = 'from 0deg';
+                        if (direction && direction.match(/\d+deg/)) {
+                            angle = `from ${direction}`;
+                        }
+                        gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
+                    } else {
+                        gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+                    }
+                    el.style.background = gradient;
+                    if (animStyle === 'rotate' || animStyle === 'color-shift') {
+                        let intervalId;
+                        if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
+                            let angleVal = 0;
+                            intervalId = setInterval(() => {
+                                angleVal = (angleVal + 2) % 360;
+                                if (!document.body.contains(el)) {
+                                    clearInterval(intervalId);
+                                    gradientAnimIntervals.delete(uid);
+                                    return;
+                                }
+                                if (gradientType === 'conic') {
+                                    el.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
+                                } else {
+                                    el.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
+                                }
+                            }, 50);
+                        } else if (animStyle === 'color-shift') {
+                            let isStart = true;
+                            intervalId = setInterval(() => {
+                                if (!document.body.contains(el)) {
+                                    clearInterval(intervalId);
+                                    gradientAnimIntervals.delete(uid);
+                                    return;
+                                }
+                                if (gradientType === 'radial') {
+                                    el.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                                } else if (gradientType === 'conic') {
+                                    el.style.background = `conic-gradient(from 0deg, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                                } else {
+                                    el.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+                                }
+                                isStart = !isStart;
+                            }, 1000);
+                        }
+                        if (intervalId) gradientAnimIntervals.set(uid, intervalId);
+                    }
+                } catch {}
+            }
+            // Restore element animation (scale/move/rotate)
+            if (el.dataset.elementAnimation) {
+                try {
+                    const { type, preset, duration } = JSON.parse(el.dataset.elementAnimation);
+                    if (elementAnimIntervals.has(uid)) {
+                        clearInterval(elementAnimIntervals.get(uid));
+                        elementAnimIntervals.delete(uid);
+                    }
+                    let intervalId;
+                    if (type === 'scale') {
+                        let scale = 1, direction = 1;
+                        intervalId = setInterval(() => {
+                            if (!document.body.contains(el)) {
+                                clearInterval(intervalId);
+                                elementAnimIntervals.delete(uid);
+                                return;
+                            }
+                            scale += direction * 0.02;
+                            if (scale > 1.2) direction = -1;
+                            if (scale < 0.8) direction = 1;
+                            el.style.transform = `scale(${scale})`;
+                        }, 1000 * (parseFloat(duration) || 2) / 40);
+                    } else if (type === 'move') {
+                        let pos = 0, dir = 1;
+                        intervalId = setInterval(() => {
+                            if (!document.body.contains(el)) {
+                                clearInterval(intervalId);
+                                elementAnimIntervals.delete(uid);
+                                return;
+                            }
+                            pos += dir * 2;
+                            if (pos > 40) dir = -1;
+                            if (pos < -40) dir = 1;
+                            el.style.transform = `translateX(${pos}px)`;
+                        }, 1000 * (parseFloat(duration) || 2) / 40);
+                    } else if (type === 'rotate') {
+                        let angle = 0;
+                        intervalId = setInterval(() => {
+                            if (!document.body.contains(el)) {
+                                clearInterval(intervalId);
+                                elementAnimIntervals.delete(uid);
+                                return;
+                            }
+                            angle = (angle + 5) % 360;
+                            el.style.transform = `rotate(${angle}deg)`;
+                        }, 1000 * (parseFloat(duration) || 2) / 40);
+                    }
+                    if (intervalId) elementAnimIntervals.set(uid, intervalId);
+                } catch {}
+            }
+        });
+    }
+
+    // Call restoreElementAnimations after undo/redo/import/load/initial render
+    // Example: after saveState() or after elements are re-created
+    // You may need to call restoreElementAnimations() in your undo/redo/load logic
 
     // Setup popups
     setupPopupEvents({
@@ -1062,13 +1210,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set all element backgrounds (cycle through theme colors)
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
-            // --- Always clear all intervals for this element (including gradients/animations) ---
+            // --- Always clear all intervals for this element (including gradients/animations/color transitions) ---
             clearAllIntervalsForElement(el);
-            // --- Remove any gradient/animation dataset and style ---
+            // --- Remove any gradient/animation/color transition dataset and style ---
             delete el.dataset.colorTransition;
             delete el.dataset.colorGradient;
+            delete el.dataset.elementAnimation;
             el.style.background = '';
             el.style.backgroundColor = '';
+            el.style.transform = '';
             // --- Set background color ---
             let bgColor = forceOverride
                 ? theme.colors[(i + 1) % theme.colors.length]
@@ -1268,18 +1418,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Toggle Grid Functionality ---
     if (backgroundBtn) {
         backgroundBtn.addEventListener('click', () => {
-            gridEnabled = !gridEnabled;
-            backgroundBtn.classList.toggle('active', gridEnabled);
-            // Optionally add/remove a grid overlay (CSS or canvas background)
-            if (gridEnabled) {
-                canvas.style.backgroundImage =
-                    'linear-gradient(to right, #ccc 1px, transparent 1px), linear-gradient(to bottom, #ccc 1px, transparent 1px)';
-                canvas.style.backgroundSize = '20px 20px';
-            } else {
-                canvas.style.backgroundImage = '';
-                canvas.style.backgroundSize = '';
-            }
+            // Open a color picker dialog for canvas background
+            const picker = document.createElement('input');
+            picker.type = 'color';
+            picker.value = rgbToHex(window.getComputedStyle(canvas).backgroundColor || '#ffffff');
+            picker.style.position = 'fixed';
+            picker.style.left = '-9999px';
+            document.body.appendChild(picker);
+            picker.click();
+            picker.addEventListener('input', (e) => {
+                canvas.style.background = e.target.value;
+                document.body.removeChild(picker);
+                if (typeof saveState === 'function' && canvas) saveState();
+            });
+            picker.addEventListener('blur', () => {
+                if (document.body.contains(picker)) document.body.removeChild(picker);
+            });
         });
+    }
+    // Helper: Convert rgb/rgba to hex
+    function rgbToHex(rgb) {
+        if (!rgb) return '#ffffff';
+        const result = rgb.match(/\d+/g);
+        if (!result || result.length < 3) return '#ffffff';
+        return (
+            '#' +
+            ((1 << 24) + (parseInt(result[0]) << 16) + (parseInt(result[1]) << 8) + parseInt(result[2]))
+                .toString(16)
+                .slice(1)
+        );
     }
 
     // On initial load, set resize handle visibility based on lock state
