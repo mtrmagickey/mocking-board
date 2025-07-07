@@ -723,6 +723,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themePopup.setAttribute('aria-modal', 'true');
         themePopup.setAttribute('tabindex', '-1');
         themePopup.style.display = 'none';
+        themePopup.style.pointerEvents = 'none';
         themePopup.style.position = 'fixed';
         themePopup.style.left = '50%';
         themePopup.style.top = '50%';
@@ -745,6 +746,32 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         document.body.appendChild(themePopup);
     }
+
+    // --- Theme Popup Show/Hide Logic ---
+    function openThemePopup() {
+        themePopup.style.display = 'block';
+        themePopup.style.pointerEvents = 'auto';
+        themePopup.focus();
+    }
+    function closeThemePopup() {
+        themePopup.style.display = 'none';
+        themePopup.style.pointerEvents = 'none';
+        themeBtn.focus();
+    }
+    themeBtn.addEventListener('click', openThemePopup);
+    themePopup.querySelector('#close-theme-popup').addEventListener('click', closeThemePopup);
+    // Also close on Escape key
+    themePopup.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeThemePopup();
+    });
+    // Prevent popup from closing when clicking inside
+    themePopup.addEventListener('mousedown', (e) => e.stopPropagation());
+    // Close popup when clicking outside
+    document.addEventListener('mousedown', (e) => {
+        if (themePopup.style.display === 'block' && !themePopup.contains(e.target) && e.target !== themeBtn) {
+            closeThemePopup();
+        }
+    });
 
     // Example palettes (Material, Flat UI, Tailwind inspired)
     const colorThemes = [
