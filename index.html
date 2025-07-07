@@ -8,61 +8,63 @@
 </head>
 <body>
     <div class="app-container">
-        <div id="sidebar" class="sidebar">
-            <h2>Elements</h2>
-            <button class="element-button" data-type="header">Header</button>
-            <button class="element-button" data-type="paragraph">Paragraph</button>
-            <button class="element-button" data-type="image">Image</button>
-            <button class="element-button" data-type="button">Button</button>
-            <button class="element-button" data-type="video">Video</button>
-            <button class="element-button" data-type="audio">Audio</button>
-            <button class="element-button" data-type="youtube">YouTube</button>
-            <button class="element-button" data-type="rectangle">Rectangle</button>
-            <button class="element-button" data-type="circle">Circle</button>
-            <button class="element-button" data-type="line">Line</button>
-            <button class="element-button" data-type="arrow">Arrow</button>
-            <button class="element-button" data-type="triangle">Triangle</button>
-            <button class="element-button" data-type="colorTransition">Color Transition</button>
-            <button class="element-button" data-type="colorGradient">Color Gradient</button>
-        </div>
-        <div id="canvas-container" class="canvas-container">
-            <div id="canvas" class="canvas">
+        <nav id="sidebar" class="sidebar" role="navigation" aria-label="Element palette">
+            <h2 id="sidebar-heading">Elements</h2>
+            <div role="group" aria-labelledby="sidebar-heading">
+                <button class="element-button" data-type="header" aria-label="Add header">Header</button>
+                <button class="element-button" data-type="paragraph" aria-label="Add paragraph">Paragraph</button>
+                <button class="element-button" data-type="image" aria-label="Add image">Image</button>
+                <button class="element-button" data-type="button" aria-label="Add button">Button</button>
+                <button class="element-button" data-type="video" aria-label="Add video">Video</button>
+                <button class="element-button" data-type="audio" aria-label="Add audio">Audio</button>
+                <button class="element-button" data-type="youtube" aria-label="Add YouTube video">YouTube</button>
+                <button class="element-button" data-type="rectangle" aria-label="Add rectangle">Rectangle</button>
+                <button class="element-button" data-type="circle" aria-label="Add circle">Circle</button>
+                <button class="element-button" data-type="line" aria-label="Add line">Line</button>
+                <button class="element-button" data-type="arrow" aria-label="Add arrow">Arrow</button>
+                <button class="element-button" data-type="triangle" aria-label="Add triangle">Triangle</button>
+                <button class="element-button" data-type="colorTransition" aria-label="Add color transition">Color Transition</button>
+                <button class="element-button" data-type="colorGradient" aria-label="Add color gradient">Color Gradient</button>
+            </div>
+        </nav>
+        <main id="canvas-container" class="canvas-container" role="main">
+            <div id="canvas" class="canvas" aria-label="Design canvas" tabindex="0">
                 <div id="grid" class="grid"></div>
             </div>
-        </div>
-        <div id="toolbar" class="toolbar collapsed">
-            <button id="load-btn">Load</button>
-            <button id="clear-btn">Clear</button>
-            <button id="export-btn">Export</button>
-            <button id="toggle-sidebar-btn">Toggle Sidebar</button>
-            <button id="lock-btn">Lock</button>
-            <button id="background-btn">Background</button>
-            <button id="toggle-grid-btn">Toggle Grid</button>
+        </main>
+        <div id="toolbar" class="toolbar collapsed" role="toolbar" aria-label="Main toolbar">
+            <button id="load-btn" aria-label="Load project">Load</button>
+            <button id="clear-btn" aria-label="Clear canvas">Clear</button>
+            <button id="export-btn" aria-label="Export project">Export</button>
+            <button id="toggle-sidebar-btn" aria-label="Toggle sidebar">Toggle Sidebar</button>
+            <button id="lock-btn" aria-label="Lock selected element">Lock</button>
+            <button id="background-btn" aria-label="Change background">Background</button>
+            <button id="toggle-grid-btn" aria-label="Toggle grid">Toggle Grid</button>
         </div>
     </div>
 
-    <div id="contextMenu" class="context-menu">
-        <button id="changeColor">Change Color</button>
-        <button id="rotateElement">Rotate 5°</button>
-        <button id="rotate90Element">Rotate 90°</button>
-        <button id="changeLinkedMedia">Change Media</button>
-        <button id="fontSize">Change Font Size</button>
-        <button id="fontColor">Change Font Color</button>
-        <button id="textAlign">Text Align</button>
-        <button id="changeFont">Change Font</button>
-        <button id="makeTransparent">Make Transparent</button>
-        <button id="createColorTransition">Create Color Transition</button>
-        <button id="createColorGradient">Create Color Gradient</button>
-        <button id="createAnimation">Create Animation</button>
-        <button id="toggleLoop">Toggle Loop</button>
-        <button id="toggleBorder">Toggle Border</button>
-        <button id="moveForward">Move Forward</button>
-        <button id="moveBackward">Move Backward</button>
-        <button id="deleteElement">Delete</button>
+    <div id="contextMenu" class="context-menu" role="menu" aria-label="Element context menu">
+        <button id="changeColor" role="menuitem">Change Color</button>
+        <button id="rotateElement" role="menuitem">Rotate 5°</button>
+        <button id="rotate90Element" role="menuitem">Rotate 90°</button>
+        <button id="changeLinkedMedia" role="menuitem">Change Media</button>
+        <button id="fontSize" role="menuitem">Change Font Size</button>
+        <button id="fontColor" role="menuitem">Change Font Color</button>
+        <button id="textAlign" role="menuitem">Text Align</button>
+        <button id="changeFont" role="menuitem">Change Font</button>
+        <button id="makeTransparent" role="menuitem">Make Transparent</button>
+        <button id="createColorTransition" role="menuitem">Create Color Transition</button>
+        <button id="createColorGradient" role="menuitem">Create Color Gradient</button>
+        <button id="createAnimation" role="menuitem">Create Animation</button>
+        <button id="toggleLoop" role="menuitem">Toggle Loop</button>
+        <button id="toggleBorder" role="menuitem">Toggle Border</button>
+        <button id="moveForward" role="menuitem">Move Forward</button>
+        <button id="moveBackward" role="menuitem">Move Backward</button>
+        <button id="deleteElement" role="menuitem">Delete</button>
     </div>
 
-    <div id="color-popup" class="popup">
-        <label for="color-picker">Pick a color:</label>
+    <div id="color-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="color-popup-label">
+        <label id="color-popup-label" for="color-picker">Pick a color:</label>
         <input type="color" id="color-picker">
         <label for="hex-input">Hex Code:</label>
         <input type="text" id="hex-input">
@@ -72,8 +74,8 @@
         <button class="cancel-btn" onclick="document.getElementById('color-popup').style.display='none'">Cancel</button>
     </div>
 
-    <div id="media-popup" class="popup">
-        <label for="media-url-input">Media URL:</label>
+    <div id="media-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="media-popup-label">
+        <label id="media-popup-label" for="media-url-input">Media URL:</label>
         <input type="text" id="media-url-input">
         <label for="search-query-input">Search for images:</label>
         <input type="text" id="search-query-input">
@@ -83,8 +85,8 @@
         <button class="cancel-btn" onclick="document.getElementById('media-popup').style.display='none'">Cancel</button>
     </div>
 
-    <div id="color-transition-popup" class="popup">
-        <label for="start-color">Start Color:</label>
+    <div id="color-transition-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="color-transition-popup-label">
+        <label id="color-transition-popup-label" for="start-color">Start Color:</label>
         <input type="color" id="start-color">
         <label for="end-color">End Color:</label>
         <input type="color" id="end-color">
@@ -94,8 +96,8 @@
         <button class="cancel-btn" onclick="document.getElementById('color-transition-popup').style.display='none'">Cancel</button>
     </div>
 
-    <div id="color-gradient-popup" class="popup">
-        <label for="start-gradient-color">Start Color:</label>
+    <div id="color-gradient-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="color-gradient-popup-label">
+        <label id="color-gradient-popup-label" for="start-gradient-color">Start Color:</label>
         <input type="color" id="start-gradient-color">
         <label for="end-gradient-color">End Color:</label>
         <input type="color" id="end-gradient-color">
@@ -110,8 +112,8 @@
         <button class="cancel-btn" onclick="document.getElementById('color-gradient-popup').style.display='none'">Cancel</button>
     </div>
 
-    <div id="animation-popup" class="popup">
-        <label for="animation-type">Animation Type:</label>
+    <div id="animation-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="animation-popup-label">
+        <label id="animation-popup-label" for="animation-type">Animation Type:</label>
         <select id="animation-type">
             <option value="move">Move</option>
             <option value="scale">Scale</option>
@@ -129,13 +131,13 @@
         <button class="cancel-btn" onclick="document.getElementById('animation-popup').style.display='none'">Cancel</button>
     </div>
 
-    <div id="widget" class="widget">
+    <aside id="widget" class="widget" role="complementary" aria-label="MTR Magic Key badge">
         <a href="https://www.mtrmagickey.com"><img src="https://github.com/mtrmagickey/mocking-board/blob/main/mtrmk_badge.png?raw=true" alt="MTR Magic Key"></a>
-    </div>
+    </aside>
 
     <input type="file" id="file-input" style="display: none;">
 
-    <script src="main.js"></script>
+    <script type="module" src="main.js"></script>
     <script src="colorManagement.js"></script>
     <script src="elementCreation.js"></script>
     <script src="exportFunctionality.js"></script>

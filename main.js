@@ -1,3 +1,10 @@
+import { createElement as createElementFromManager } from './elementManager.js';
+import { saveState, undo, redo } from './stateManager.js';
+import { hexToRgba, rgbToHex, getRandomColor } from './colorAnimationUtils.js';
+import { openPopup, closePopup, setupPopupEvents } from './popupManager.js';
+import { startDragging, startResizing } from './dragResizeManager.js';
+import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
+
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
@@ -59,33 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const fonts = ['Roboto', 'Pacifico', 'Old Standard TT'];
     let fontIndex = 0;
 
-    const undoStack = [];
-    const redoStack = [];
-
-    function saveState() {
-        const state = canvas.innerHTML;
-        undoStack.push(state);
-        redoStack.length = 0; // Clear redo stack
-    }
-
-    function undo() {
-        if (undoStack.length > 0) {
-            redoStack.push(canvas.innerHTML);
-            const prevState = undoStack.pop();
-            canvas.innerHTML = prevState;
-            reattachEventListeners();
-        }
-    }
-
-    function redo() {
-        if (redoStack.length > 0) {
-            undoStack.push(canvas.innerHTML);
-            const nextState = redoStack.pop();
-            canvas.innerHTML = nextState;
-            reattachEventListeners();
-        }
-    }
-
     function reattachEventListeners() {
         const elements = canvas.querySelectorAll('.element');
         elements.forEach(el => {
@@ -106,18 +86,141 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function getRandomColor() {
-        const colors = ['#f9dea2', '#cc0000', '#ffffff', '#8c8c8c', '#FAC800', '#6F7D1C', '#2b2622', '#b5a643', '#008473', '#990000', 'transparent'];
-        return colors[Math.floor(Math.random() * colors.length)];
-    }
-
-    elementButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            if (!isLocked) {
-                const type = button.getAttribute('data-type');
-                createElement(type);
+    // Sidebar event delegation for element creation
+    sidebar.addEventListener('click', (e) => {
+        const button = e.target.closest('.element-button');
+        if (button && !isLocked) {
+            const type = button.getAttribute('data-type');
+            let element;
+            if (type === 'youtube') {
+                const youtubeUrl = prompt("Enter the YouTube URL:");
+                const youtubeID = extractYouTubeID(youtubeUrl);
+                if (youtubeID) {
+                    element = createElementFromManager(type);
+                    element.innerHTML = `<iframe src="https://www.youtube.com/embed/${youtubeID}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+                } else {
+                    alert("Invalid YouTube URL.");
+                    return;
+                }
+            } else {
+                element = createElementFromManager(type);
             }
-        });
+            canvas.appendChild(element);
+            saveState();
+        }
+    });
+
+    // Canvas event delegation for dragging, resizing, and context menu
+    canvas.addEventListener('pointerdown', (e) => {
+        const element = e.target.closest('.element');
+        if (!element || isLocked) return;
+        if (e.target.classList.contains('resize-handle')) {
+            startResizing(e, () => isLocked, setSelected);
+        } else {
+            startDragging(e, () => isLocked, setDragged, setOffset);
+        }
+    });
+
+    canvas.addEventListener('contextmenu', (e) => {
+        const element = e.target.closest('.element');
+        if (!element || isLocked) return;
+        e.preventDefault();
+        selectedElement = element;
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = `${e.clientX}px`;
+        contextMenu.style.top = `${e.clientY}px`;
+    });
+
+    // Context menu event delegation
+    contextMenu.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const id = btn.id;
+        if (id === 'changeColor') {
+            if (selectedElement) openColorPopup();
+        } else if (id === 'rotateElement') {
+            if (selectedElement) {
+                const currentRotation = selectedElement.dataset.rotation || 0;
+                const newRotation = (parseInt(currentRotation) + 5) % 360;
+                selectedElement.style.transform = `rotate(${newRotation}deg)`;
+                selectedElement.dataset.rotation = newRotation;
+            }
+        } else if (id === 'rotate90Element') {
+            if (selectedElement) {
+                const currentRotation = selectedElement.dataset.rotation || 0;
+                const newRotation = (parseInt(currentRotation) + 90) % 360;
+                selectedElement.style.transform = `rotate(${newRotation}deg)`;
+                selectedElement.dataset.rotation = newRotation;
+            }
+        } else if (id === 'changeLinkedMedia') {
+            if (selectedElement) openMediaPopup();
+        } else if (id === 'fontSize') {
+            if (selectedElement) {
+                const newSize = prompt("Enter the new font size (e.g., 16px, 2em, 150%):");
+                if (newSize) {
+                    selectedElement.style.fontSize = newSize;
+                    saveState();
+                }
+            }
+        } else if (id === 'fontColor') {
+            fontColorPicker.click();
+        } else if (id === 'textAlign') {
+            if (selectedElement) {
+                alignmentIndex = (alignmentIndex + 1) % alignments.length;
+                const editableElements = selectedElement.querySelectorAll('.editable');
+                editableElements.forEach(el => {
+                    el.style.textAlign = alignments[alignmentIndex];
+                });
+                saveState();
+            }
+        } else if (id === 'changeFont') {
+            if (selectedElement) {
+                fontIndex = (fontIndex + 1) % fonts.length;
+                const editableElements = selectedElement.querySelectorAll('.editable');
+                editableElements.forEach(el => {
+                    el.style.fontFamily = fonts[fontIndex];
+                });
+                saveState();
+            }
+        } else if (id === 'makeTransparent') {
+            if (selectedElement) {
+                selectedElement.style.backgroundColor = 'rgba(43, 38, 34, 0)';
+                saveState();
+            }
+        } else if (id === 'createColorTransition') {
+            if (selectedElement) openColorTransitionPopup();
+        } else if (id === 'createColorGradient') {
+            if (selectedElement) openColorGradientPopup();
+        } else if (id === 'createAnimation') {
+            if (selectedElement) openAnimationPopup();
+        } else if (id === 'toggleLoop') {
+            if (selectedElement) {
+                const mediaElement = selectedElement.querySelector('video, audio');
+                if (mediaElement) {
+                    mediaElement.loop = !mediaElement.loop;
+                    alert(`Looping ${mediaElement.loop ? 'enabled' : 'disabled'} for this element.`);
+                }
+            }
+        } else if (id === 'toggleBorder') {
+            if (selectedElement) {
+                const currentBorder = selectedElement.style.border;
+                selectedElement.style.border = currentBorder === '1px solid #bdc3c7' ? 'none' : '1px solid #bdc3c7';
+            }
+        } else if (id === 'moveForward') {
+            if (selectedElement) {
+                selectedElement.style.zIndex = (parseInt(selectedElement.style.zIndex) || 0) + 1;
+            }
+        } else if (id === 'moveBackward') {
+            if (selectedElement) {
+                selectedElement.style.zIndex = (parseInt(selectedElement.style.zIndex) || 0) - 1;
+            }
+        } else if (id === 'deleteElement') {
+            if (selectedElement) {
+                selectedElement.remove();
+                saveState();
+            }
+        }
+        contextMenu.style.display = 'none';
     });
 
     function createElement(type) {
@@ -504,56 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function openColorPopup() {
-        colorPopup.style.display = 'block';
-    }
-
-    function closeColorPopup() {
-        colorPopup.style.display = 'none';
-    }
-
-    function openColorTransitionPopup() {
-        colorTransitionPopup.style.display = 'block';
-    }
-
-    function closeColorTransitionPopup() {
-        colorTransitionPopup.style.display = 'none';
-    }
-
-    function openColorGradientPopup() {
-        colorGradientPopup.style.display = 'block';
-    }
-
-    function closeColorGradientPopup() {
-        colorGradientPopup.style.display = 'none';
-    }
-
-    function openAnimationPopup() {
-        animationPopup.style.display = 'block';
-    }
-
-    function closeAnimationPopup() {
-        animationPopup.style.display = 'none';
-    }
-
-    function openMediaPopup() {
-        mediaPopup.style.display = 'block';
-    }
-
-    function closeMediaPopup() {
-        mediaPopup.style.display = 'none';
-    }
-
-    applyAnimationBtn.addEventListener('click', () => {
-        if (selectedElement) {
-            const animationType = animationTypeSelect.value;
-            const animationPreset = animationPresetSelect.value;
-            const duration = animationDurationInput.value;
-            selectedElement.style.animation = `${animationType}${animationPreset} ${duration}s infinite alternate`;
-        }
-        closeAnimationPopup();
-    });
-
     applyTransitionBtn.addEventListener('click', () => {
         if (selectedElement) {
             const startColor = startColorInput.value;
@@ -564,32 +617,70 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedElement.style.backgroundColor = startColor;
 
             let isStartColor = true;
-            setInterval(() => {
-                selectedElement.style.backgroundColor = isStartColor ? endColor : startColor;
-                isStartColor = !isStartColor;
-            }, transitionTime * 1000);
+            // Clear any previous interval
+            import('./stateManager.js').then(({ setColorTransitionInterval, clearColorTransitionInterval }) => {
+                clearColorTransitionInterval(selectedElement);
+                const intervalId = setInterval(() => {
+                    selectedElement.style.backgroundColor = isStartColor ? endColor : startColor;
+                    isStartColor = !isStartColor;
+                }, transitionTime * 1000);
+                setColorTransitionInterval(selectedElement, intervalId);
+            });
         }
         closeColorTransitionPopup();
     });
 
-    applyGradientBtn.addEventListener('click', () => {
+    // Cleanup color transition interval on element delete
+    document.getElementById('deleteElement').addEventListener('click', () => {
         if (selectedElement) {
-            const startGradientColor = startGradientColorInput.value;
-            const endGradientColor = endGradientColorInput.value;
-            const gradientDirection = gradientDirectionSelect.value;
-
-            selectedElement.style.background = `linear-gradient(${gradientDirection}, ${startGradientColor}, ${endGradientColor})`;
+            import('./stateManager.js').then(({ clearColorTransitionInterval }) => {
+                clearColorTransitionInterval(selectedElement);
+                selectedElement.remove();
+                saveState();
+            });
         }
-        closeColorGradientPopup();
     });
 
-    function rgbToHex(rgb) {
-        const rgbArray = rgb.match(/\d+/g).map(Number);
-        return `#${((1 << 24) + (rgbArray[0] << 16) + (rgbArray[1] << 8) + rgbArray[2]).toString(16).slice(1).toUpperCase()}`;
-    }
+    // Setup popups
+    setupPopupEvents({
+        colorPopup,
+        colorTransitionPopup,
+        colorGradientPopup,
+        animationPopup,
+        mediaPopup
+    });
 
-    colorPicker.addEventListener('input', (event) => {
-        hexInput.value = event.target.value;
+    // Replace open/close popup functions with popupManager usage
+    function openColorPopup() { openPopup(colorPopup); }
+    function closeColorPopup() { closePopup(colorPopup); }
+    function openColorTransitionPopup() { openPopup(colorTransitionPopup); }
+    function closeColorTransitionPopup() { closePopup(colorTransitionPopup); }
+    function openColorGradientPopup() { openPopup(colorGradientPopup); }
+    function closeColorGradientPopup() { closePopup(colorGradientPopup); }
+    function openAnimationPopup() { openPopup(animationPopup); }
+    function closeAnimationPopup() { closePopup(animationPopup); }
+    function openMediaPopup() { openPopup(mediaPopup); }
+    function closeMediaPopup() { closePopup(mediaPopup); }
+
+    // Setup drag/resize logic
+    // Replace startDragging, startResizing with dragResizeManager usage
+    // Use setDragged, setOffset, setSelected to update local state
+    function setDragged(el) { draggedElement = el; }
+    function setOffset(val) { offset = val; }
+    function setSelected(el) { selectedElement = el; }
+
+    // Setup media drop and Unsplash search
+    setupMediaDrop(canvas, createImageElement, createVideoElement, createAudioElement);
+    setupUnsplashSearch(searchBtn, searchQueryInput, searchResults, mediaUrlInput);
+
+    document.addEventListener('click', () => {
+        contextMenu.style.display = 'none';
+    });
+
+    document.getElementById('changeColor').addEventListener('click', () => {
+        if (selectedElement) {
+            openColorPopup();
+        }
     });
 
     applyColorBtn.addEventListener('click', () => {
@@ -602,6 +693,195 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         closeColorPopup();
+    });
+
+    function changeElementColor(element, color) {
+        const svg = element.querySelector('svg');
+        if (svg) {
+            const shapes = svg.querySelectorAll('rect, circle, line, polygon');
+            shapes.forEach(shape => {
+                if (shape.tagName === 'line') {
+                    shape.setAttribute('stroke', color);
+                } else {
+                    shape.setAttribute('fill', color);
+                }
+            });
+        } else {
+            element.style.backgroundColor = color;
+        }
+        saveState();
+    }
+
+    document.getElementById('rotateElement').addEventListener('click', () => {
+        if (selectedElement) {
+            const currentRotation = selectedElement.dataset.rotation || 0;
+            const newRotation = (parseInt(currentRotation) + 5) % 360;
+            selectedElement.style.transform = `rotate(${newRotation}deg)`;
+            selectedElement.dataset.rotation = newRotation;
+        }
+    });
+
+    document.getElementById('rotate90Element').addEventListener('click', () => {
+        if (selectedElement) {
+            const currentRotation = selectedElement.dataset.rotation || 0;
+            const newRotation = (parseInt(currentRotation) + 90) % 360;
+            selectedElement.style.transform = `rotate(${newRotation}deg)`;
+            selectedElement.dataset.rotation = newRotation;
+        }
+    });
+
+    document.getElementById('changeLinkedMedia').addEventListener('click', () => {
+        if (selectedElement) {
+            openMediaPopup();
+        }
+    });
+
+    applyMediaBtn.addEventListener('click', () => {
+        if (selectedElement) {
+            const mediaUrl = mediaUrlInput.value;
+            if (mediaUrl) {
+                if (selectedElement.querySelector('button')) {
+                    const buttonElement = selectedElement.querySelector('button');
+                    buttonElement.addEventListener('click', () => {
+                        if (buttonElement.dataset.toggled === 'true') {
+                            const imgElement = selectedElement.querySelector('img');
+                            if (imgElement) {
+                                imgElement.remove();
+                            }
+                            buttonElement.dataset.toggled = 'false';
+                        } else {
+                            if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
+                                const imgElement = document.createElement('img');
+                                imgElement.src = mediaUrl;
+                                imgElement.style.position = 'absolute';
+                                imgElement.style.left = '0';
+                                imgElement.style.top = '0';
+                                imgElement.style.width = '100%';
+                                imgElement.style.height = '100%';
+                                imgElement.style.pointerEvents = 'none';
+                                selectedElement.appendChild(imgElement);
+                                buttonElement.dataset.toggled = 'true';
+                            } else {
+                                window.open(mediaUrl, '_blank');
+                            }
+                        }
+                    });
+                } else {
+                    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
+                        const imgElement = document.createElement('img');
+                        imgElement.src = mediaUrl;
+                        imgElement.style.position = 'absolute';
+                        imgElement.style.left = '0';
+                        imgElement.style.top = '0';
+                        imgElement.style.width = '100%';
+                        imgElement.style.height = '100%';
+                        imgElement.style.pointerEvents = 'none';
+                        selectedElement.appendChild(imgElement);
+                    } else if (mediaUrl.match(/\.(mp4|ogg|webm|mov)$/i) != null) {
+                        selectedElement.innerHTML = `<video width="100%" height="100%" controls><source src="${mediaUrl}" type="video/mp4">Your browser does not support the video tag.</video>`;
+                        selectedElement.querySelector('video').addEventListener('pointerdown', (e) => e.stopPropagation());
+                    } else if (mediaUrl.match(/\.(mp3|wav|ogg|flac)$/i) != null) {
+                        selectedElement.innerHTML = `<audio controls><source src="${mediaUrl}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+                        selectedElement.querySelector('audio').addEventListener('pointerdown', (e) => e.stopPropagation());
+                    } else {
+                        alert("Unsupported media type. Please use image, video, or audio URLs.");
+                    }
+                }
+            }
+            closeMediaPopup();
+        }
+    });
+
+    searchBtn.addEventListener('click', () => {
+        const query = searchQueryInput.value;
+        if (query) {
+            searchResults.innerHTML = '';
+            fetch(`https://api.unsplash.com/search/photos?query=${query}&client_id=YOUR_UNSPLASH_ACCESS_KEY`)
+                .then(response => response.json())
+                .then(data => {
+                    data.results.forEach(photo => {
+                        const imgElement = document.createElement('img');
+                        imgElement.src = photo.urls.small;
+                        imgElement.alt = photo.alt_description;
+                        imgElement.style.cursor = 'pointer';
+                        imgElement.style.width = '100px';
+                        imgElement.style.height = 'auto';
+                        imgElement.addEventListener('click', () => {
+                            mediaUrlInput.value = photo.urls.small;
+                            searchResults.innerHTML = '';
+                        });
+                        searchResults.appendChild(imgElement);
+                    });
+                });
+        }
+    });
+
+    document.getElementById('fontSize').addEventListener('click', () => {
+        if (selectedElement) {
+            const newSize = prompt("Enter the new font size (e.g., 16px, 2em, 150%):");
+            if (newSize) {
+                selectedElement.style.fontSize = newSize;
+                saveState();
+            }
+        }
+    });
+
+    document.getElementById('fontColor').addEventListener('click', () => {
+        fontColorPicker.click();
+    });
+
+    fontColorPicker.addEventListener('input', (event) => {
+        if (selectedElement) {
+            selectedElement.style.color = event.target.value;
+            saveState();
+        }
+    });
+
+    document.getElementById('textAlign').addEventListener('click', () => {
+        if (selectedElement) {
+            alignmentIndex = (alignmentIndex + 1) % alignments.length;
+            const editableElements = selectedElement.querySelectorAll('.editable');
+            editableElements.forEach(el => {
+                el.style.textAlign = alignments[alignmentIndex];
+            });
+            saveState();
+        }
+    });
+
+    document.getElementById('changeFont').addEventListener('click', () => {
+        if (selectedElement) {
+            fontIndex = (fontIndex + 1) % fonts.length;
+            const editableElements = selectedElement.querySelectorAll('.editable');
+            editableElements.forEach(el => {
+                el.style.fontFamily = fonts[fontIndex];
+            });
+            saveState();
+        }
+    });
+
+    document.getElementById('makeTransparent').addEventListener('click', () => {
+        if (selectedElement) {
+            selectedElement.style.backgroundColor = 'rgba(43, 38, 34, 0)';
+            saveState();
+        }
+    });
+
+    document.getElementById('createColorTransition').addEventListener('click', () => {
+        if (selectedElement) {
+            openColorTransitionPopup();
+        }
+    });
+
+    document.getElementById('createColorGradient').addEventListener('click', () => {
+        if (selectedElement) {
+            openColorGradientPopup();
+        }
+    });
+
+    document.getElementById('createAnimation').addEventListener('click', () => {
+        if (selectedElement) {
+            openAnimationPopup();
+        }
     });
 
     document.getElementById('toggleLoop').addEventListener('click', () => {
@@ -752,27 +1032,13 @@ document.addEventListener('DOMContentLoaded', () => {
         grid.style.display = grid.style.display === 'none' ? 'block' : 'none';
     });
 
-    function hexToRgba(hex, transparency) {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        const a = transparency / 100;
-        return `rgba(${r}, ${g}, ${b}, ${a})`;
-    }
-
-    function extractYouTubeID(url) {
-        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i;
-        const match = url.match(regex);
-        return match ? match[1] : null;
-    }
-
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
             event.preventDefault();
-            undo();
+            undo(canvas, reattachEventListeners);
         } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.shiftKey && event.key === 'z'))) {
             event.preventDefault();
-            redo();
+            redo(canvas, reattachEventListeners);
         }
     });
 
@@ -787,30 +1053,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 editable.contentEditable = !isLocked;
             });
         });
-    });
-
-    canvas.addEventListener('dragover', (e) => {
-        e.preventDefault();
-    });
-
-    canvas.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            const file = files[0];
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const dataUrl = e.target.result;
-                if (file.type.startsWith('image/')) {
-                    createImageElement(dataUrl);
-                } else if (file.type.startsWith('video/')) {
-                    createVideoElement(dataUrl);
-                } else if (file.type.startsWith('audio/')) {
-                    createAudioElement(dataUrl);
-                }
-            };
-            reader.readAsDataURL(file);
-        }
     });
 
     function createImageElement(dataUrl) {
