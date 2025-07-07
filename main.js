@@ -473,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             buttonElement.dataset.toggled = 'false';
                         } else {
-                            if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
+                            if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)(\?|#|$)/i) != null) {
                                 const imgElement = document.createElement('img');
                                 imgElement.src = mediaUrl;
                                 imgElement.style.position = 'absolute';
@@ -490,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
                 } else {
-                    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
+                    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)(\?|#|$)/i) != null) {
                         const imgElement = document.createElement('img');
                         imgElement.src = mediaUrl;
                         imgElement.style.position = 'absolute';
@@ -500,10 +500,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         imgElement.style.height = '100%';
                         imgElement.style.pointerEvents = 'none';
                         selectedElement.appendChild(imgElement);
-                    } else if (mediaUrl.match(/\.(mp4|ogg|webm|mov)$/i) != null) {
+                    } else if (mediaUrl.match(/\.(mp4|ogg|webm|mov)(\?|#|$)/i) != null) {
                         selectedElement.innerHTML = `<video width="100%" height="100%" controls><source src="${mediaUrl}" type="video/mp4">Your browser does not support the video tag.</video>`;
                         selectedElement.querySelector('video').addEventListener('pointerdown', (e) => e.stopPropagation());
-                    } else if (mediaUrl.match(/\.(mp3|wav|ogg|flac)$/i) != null) {
+                    } else if (mediaUrl.match(/\.(mp3|wav|ogg|flac)(\?|#|$)/i) != null) {
                         selectedElement.innerHTML = `<audio controls><source src="${mediaUrl}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
                         selectedElement.querySelector('audio').addEventListener('pointerdown', (e) => e.stopPropagation());
                     } else {
@@ -522,6 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch(`https://api.unsplash.com/search/photos?query=${query}&client_id=YOUR_UNSPLASH_ACCESS_KEY`)
                 .then(response => response.json())
                 .then(data => {
+                    if (!data.results || !Array.isArray(data.results)) {
+                        searchResults.innerHTML = '<div style="color:red">No results or API error.</div>';
+                        return;
+                    }
                     data.results.forEach(photo => {
                         const imgElement = document.createElement('img');
                         imgElement.src = photo.urls.small;
@@ -535,6 +539,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                         searchResults.appendChild(imgElement);
                     });
+                })
+                .catch(err => {
+                    searchResults.innerHTML = '<div style="color:red">Error fetching images.</div>';
                 });
         }
     });
@@ -607,6 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Improved Color Transition: Each element cycles independently ---
     applyTransitionBtn.addEventListener('click', () => {
         if (selectedElement) {
             const startColor = startColorInput.value;
@@ -616,10 +624,17 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedElement.style.transition = `background-color ${transitionTime}s ease-in-out`;
             selectedElement.style.backgroundColor = startColor;
 
-            let isStartColor = true;
-            // Clear any previous interval
+            // Store transition info for stateManager
+            selectedElement.dataset.colorTransition = JSON.stringify({
+                startColor,
+                endColor,
+                transitionTime
+            });
+
+            // Clear any previous interval for this element
             import('./stateManager.js').then(({ setColorTransitionInterval, clearColorTransitionInterval }) => {
                 clearColorTransitionInterval(selectedElement);
+                let isStartColor = true;
                 const intervalId = setInterval(() => {
                     selectedElement.style.backgroundColor = isStartColor ? endColor : startColor;
                     isStartColor = !isStartColor;
@@ -630,13 +645,17 @@ document.addEventListener('DOMContentLoaded', () => {
         closeColorTransitionPopup();
     });
 
-    // Cleanup color transition interval on element delete
-    document.getElementById('deleteElement').addEventListener('click', () => {
-        if (selectedElement) {
-            import('./stateManager.js').then(({ clearColorTransitionInterval }) => {
-                clearColorTransitionInterval(selectedElement);
-                selectedElement.remove();
-                saveState();
+    // --- Patch undo/redo to restore color transitions ---
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
+            event.preventDefault();
+            import('./stateManager.js').then(({ undo, setColorTransitionInterval, clearColorTransitionInterval }) => {
+                undo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval);
+            });
+        } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.shiftKey && event.key === 'z'))) {
+            event.preventDefault();
+            import('./stateManager.js').then(({ redo, setColorTransitionInterval, clearColorTransitionInterval }) => {
+                redo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval);
             });
         }
     });
@@ -651,11 +670,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Replace open/close popup functions with popupManager usage
-    function openColorPopup() { openPopup(colorPopup); }
+    function openColorPopup() {
+        colorPicker.value = getRandomColor();
+        hexInput.value = colorPicker.value;
+        openPopup(colorPopup);
+    }
     function closeColorPopup() { closePopup(colorPopup); }
-    function openColorTransitionPopup() { openPopup(colorTransitionPopup); }
+    function openColorTransitionPopup() {
+        startColorInput.value = getRandomColor();
+        endColorInput.value = getRandomColor();
+        openPopup(colorTransitionPopup);
+    }
     function closeColorTransitionPopup() { closePopup(colorTransitionPopup); }
-    function openColorGradientPopup() { openPopup(colorGradientPopup); }
+    function openColorGradientPopup() {
+        startGradientColorInput.value = getRandomColor();
+        endGradientColorInput.value = getRandomColor();
+        openPopup(colorGradientPopup);
+    }
     function closeColorGradientPopup() { closePopup(colorGradientPopup); }
     function openAnimationPopup() { openPopup(animationPopup); }
     function closeAnimationPopup() { closePopup(animationPopup); }
@@ -673,439 +704,189 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMediaDrop(canvas, createImageElement, createVideoElement, createAudioElement);
     setupUnsplashSearch(searchBtn, searchQueryInput, searchResults, mediaUrlInput);
 
-    document.addEventListener('click', () => {
-        contextMenu.style.display = 'none';
-    });
+    // --- Theme Selector ---
+    // Add a button to open the theme selector popup
+    const themeBtn = document.createElement('button');
+    themeBtn.id = 'theme-btn';
+    themeBtn.textContent = 'Theme';
+    themeBtn.setAttribute('aria-haspopup', 'dialog');
+    themeBtn.setAttribute('aria-controls', 'theme-popup');
+    themeBtn.style.marginLeft = '8px';
+    toolbar.appendChild(themeBtn);
 
-    document.getElementById('changeColor').addEventListener('click', () => {
-        if (selectedElement) {
-            openColorPopup();
-        }
-    });
-
-    applyColorBtn.addEventListener('click', () => {
-        if (selectedElement) {
-            const hex = hexInput.value;
-            const transparency = 100 - transparencyInput.value;  // Correct transparency handling
-            if (/^#[0-9A-F]{6}$/i.test(hex) && transparency >= 0 && transparency <= 100) {
-                const rgba = hexToRgba(hex, transparency);
-                changeElementColor(selectedElement, rgba);
-            }
-        }
-        closeColorPopup();
-    });
-
-    function changeElementColor(element, color) {
-        const svg = element.querySelector('svg');
-        if (svg) {
-            const shapes = svg.querySelectorAll('rect, circle, line, polygon');
-            shapes.forEach(shape => {
-                if (shape.tagName === 'line') {
-                    shape.setAttribute('stroke', color);
-                } else {
-                    shape.setAttribute('fill', color);
-                }
-            });
-        } else {
-            element.style.backgroundColor = color;
-        }
-        saveState();
+    // Create the theme popup (if not present)
+    let themePopup = document.getElementById('theme-popup');
+    if (!themePopup) {
+        themePopup = document.createElement('div');
+        themePopup.id = 'theme-popup';
+        themePopup.setAttribute('role', 'dialog');
+        themePopup.setAttribute('aria-modal', 'true');
+        themePopup.setAttribute('tabindex', '-1');
+        themePopup.style.display = 'none';
+        themePopup.style.position = 'fixed';
+        themePopup.style.left = '50%';
+        themePopup.style.top = '50%';
+        themePopup.style.transform = 'translate(-50%, -50%)';
+        themePopup.style.background = '#fff';
+        themePopup.style.border = '2px solid #888';
+        themePopup.style.borderRadius = '8px';
+        themePopup.style.padding = '24px 16px 16px 16px';
+        themePopup.style.zIndex = '10000';
+        themePopup.style.minWidth = '320px';
+        themePopup.innerHTML = `
+            <h2 id="theme-popup-title" style="margin-top:0">Select a Color Theme</h2>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:14px;cursor:pointer;">
+                    <input type="checkbox" id="force-theme-override" style="margin-right:6px;vertical-align:middle;">Override all element backgrounds
+                </label>
+            </div>
+            <div id="theme-swatches" style="display:flex; flex-direction:column; gap:16px;"></div>
+            <button id="close-theme-popup" style="margin-top:16px;">Close</button>
+        `;
+        document.body.appendChild(themePopup);
     }
 
-    document.getElementById('rotateElement').addEventListener('click', () => {
-        if (selectedElement) {
-            const currentRotation = selectedElement.dataset.rotation || 0;
-            const newRotation = (parseInt(currentRotation) + 5) % 360;
-            selectedElement.style.transform = `rotate(${newRotation}deg)`;
-            selectedElement.dataset.rotation = newRotation;
+    // Example palettes (Material, Flat UI, Tailwind inspired)
+    const colorThemes = [
+        {
+            name: 'Material',
+            colors: ['#2196f3', '#e91e63', '#ffeb3b', '#4caf50', '#ff9800', '#9c27b0']
+        },
+        {
+            name: 'Flat UI',
+            colors: ['#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#e74c3c']
+        },
+        {
+            name: 'Tailwind',
+            colors: ['#0ea5e9', '#f59e42', '#10b981', '#f43f5e', '#6366f1', '#fbbf24']
+        },
+        {
+            name: 'Dark',
+            colors: ['#22223b', '#4a4e69', '#9a8c98', '#c9ada7', '#f2e9e4', '#22223b']
+        },
+        {
+            name: 'Solarized',
+            colors: ['#002b36', '#073642', '#586e75', '#b58900', '#cb4b16', '#2aa198', '#859900']
+        },
+        {
+            name: 'Pastel',
+            colors: ['#ffd6e0', '#e2f0cb', '#b5ead7', '#c7ceea', '#ffdac1', '#ffb7b2']
+        },
+        {
+            name: 'Nord',
+            colors: ['#2e3440', '#3b4252', '#434c5e', '#4c566a', '#8fbcbb', '#88c0d0', '#81a1c1', '#5e81ac']
+        },
+        {
+            name: 'Monokai',
+            colors: ['#272822', '#f92672', '#a6e22e', '#fd971f', '#66d9ef', '#f8f8f2', '#75715e']
+        },
+        {
+            name: 'Vibrant',
+            colors: ['#ff1744', '#f50057', '#d500f9', '#651fff', '#2979ff', '#00e676', '#ffd600']
+        },
+        {
+            name: 'Muted',
+            colors: ['#b0bec5', '#90a4ae', '#bdbdbd', '#a1887f', '#bcaaa4', '#cfd8dc']
+        },
+        {
+            name: 'Grayscale',
+            colors: ['#111', '#333', '#555', '#777', '#aaa', '#ccc', '#eee']
+        },
+        {
+            name: 'Retro',
+            colors: ['#f4e285', '#f4a259', '#5b8e7d', '#bc4b51', '#c9cba3', '#8cb369']
+        },
+        {
+            name: 'Rainbow',
+            colors: ['#ff0000', '#ff9900', '#ffee00', '#33cc33', '#0099ff', '#6633cc', '#cc33cc']
+        },
+        {
+            name: 'Autumn',
+            colors: ['#d2691e', '#ff7f50', '#ffb347', '#ffd700', '#b22222', '#8b4513']
+        },
+        {
+            name: 'Spring',
+            colors: ['#f7cac9', '#92a8d1', '#b5ead7', '#ffdac1', '#e2f0cb', '#c7ceea']
+        },
+        {
+            name: 'Ocean',
+            colors: ['#011f4b', '#03396c', '#005b96', '#6497b1', '#b3cde0', '#e0f7fa']
+        },
+        {
+            name: 'Magic Key',
+            colors: ['#2B2622', '#F9DEA2', '#8C8C8C', '#B5A642', '#FFFFFF', '#F9DEA2']
         }
-    });
+    ];
 
-    document.getElementById('rotate90Element').addEventListener('click', () => {
-        if (selectedElement) {
-            const currentRotation = selectedElement.dataset.rotation || 0;
-            const newRotation = (parseInt(currentRotation) + 90) % 360;
-            selectedElement.style.transform = `rotate(${newRotation}deg)`;
-            selectedElement.dataset.rotation = newRotation;
-        }
-    });
-
-    document.getElementById('changeLinkedMedia').addEventListener('click', () => {
-        if (selectedElement) {
-            openMediaPopup();
-        }
-    });
-
-    applyMediaBtn.addEventListener('click', () => {
-        if (selectedElement) {
-            const mediaUrl = mediaUrlInput.value;
-            if (mediaUrl) {
-                if (selectedElement.querySelector('button')) {
-                    const buttonElement = selectedElement.querySelector('button');
-                    buttonElement.addEventListener('click', () => {
-                        if (buttonElement.dataset.toggled === 'true') {
-                            const imgElement = selectedElement.querySelector('img');
-                            if (imgElement) {
-                                imgElement.remove();
-                            }
-                            buttonElement.dataset.toggled = 'false';
-                        } else {
-                            if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
-                                const imgElement = document.createElement('img');
-                                imgElement.src = mediaUrl;
-                                imgElement.style.position = 'absolute';
-                                imgElement.style.left = '0';
-                                imgElement.style.top = '0';
-                                imgElement.style.width = '100%';
-                                imgElement.style.height = '100%';
-                                imgElement.style.pointerEvents = 'none';
-                                selectedElement.appendChild(imgElement);
-                                buttonElement.dataset.toggled = 'true';
-                            } else {
-                                window.open(mediaUrl, '_blank');
-                            }
-                        }
-                    });
-                } else {
-                    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|svg|bmp)$/i) != null) {
-                        const imgElement = document.createElement('img');
-                        imgElement.src = mediaUrl;
-                        imgElement.style.position = 'absolute';
-                        imgElement.style.left = '0';
-                        imgElement.style.top = '0';
-                        imgElement.style.width = '100%';
-                        imgElement.style.height = '100%';
-                        imgElement.style.pointerEvents = 'none';
-                        selectedElement.appendChild(imgElement);
-                    } else if (mediaUrl.match(/\.(mp4|ogg|webm|mov)$/i) != null) {
-                        selectedElement.innerHTML = `<video width="100%" height="100%" controls><source src="${mediaUrl}" type="video/mp4">Your browser does not support the video tag.</video>`;
-                        selectedElement.querySelector('video').addEventListener('pointerdown', (e) => e.stopPropagation());
-                    } else if (mediaUrl.match(/\.(mp3|wav|ogg|flac)$/i) != null) {
-                        selectedElement.innerHTML = `<audio controls><source src="${mediaUrl}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
-                        selectedElement.querySelector('audio').addEventListener('pointerdown', (e) => e.stopPropagation());
-                    } else {
-                        alert("Unsupported media type. Please use image, video, or audio URLs.");
-                    }
+    // Render swatches
+    function renderThemeSwatches() {
+        const swatches = themePopup.querySelector('#theme-swatches');
+        swatches.innerHTML = '';
+        colorThemes.forEach((theme, idx) => {
+            const row = document.createElement('div');
+            row.setAttribute('tabindex', '0');
+            row.setAttribute('role', 'button');
+            row.setAttribute('aria-label', `Apply ${theme.name} theme`);
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.cursor = 'pointer';
+            row.style.outline = 'none';
+            row.style.gap = '8px';
+            row.style.padding = '4px 0';
+            row.addEventListener('click', () => applyTheme(idx));
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    applyTheme(idx);
                 }
-            }
-            closeMediaPopup();
-        }
-    });
-
-    searchBtn.addEventListener('click', () => {
-        const query = searchQueryInput.value;
-        if (query) {
-            searchResults.innerHTML = '';
-            fetch(`https://api.unsplash.com/search/photos?query=${query}&client_id=YOUR_UNSPLASH_ACCESS_KEY`)
-                .then(response => response.json())
-                .then(data => {
-                    data.results.forEach(photo => {
-                        const imgElement = document.createElement('img');
-                        imgElement.src = photo.urls.small;
-                        imgElement.alt = photo.alt_description;
-                        imgElement.style.cursor = 'pointer';
-                        imgElement.style.width = '100px';
-                        imgElement.style.height = 'auto';
-                        imgElement.addEventListener('click', () => {
-                            mediaUrlInput.value = photo.urls.small;
-                            searchResults.innerHTML = '';
-                        });
-                        searchResults.appendChild(imgElement);
-                    });
-                });
-        }
-    });
-
-    document.getElementById('fontSize').addEventListener('click', () => {
-        if (selectedElement) {
-            const newSize = prompt("Enter the new font size (e.g., 16px, 2em, 150%):");
-            if (newSize) {
-                selectedElement.style.fontSize = newSize;
-                saveState();
-            }
-        }
-    });
-
-    document.getElementById('fontColor').addEventListener('click', () => {
-        fontColorPicker.click();
-    });
-
-    fontColorPicker.addEventListener('input', (event) => {
-        if (selectedElement) {
-            selectedElement.style.color = event.target.value;
-            saveState();
-        }
-    });
-
-    document.getElementById('textAlign').addEventListener('click', () => {
-        if (selectedElement) {
-            alignmentIndex = (alignmentIndex + 1) % alignments.length;
-            const editableElements = selectedElement.querySelectorAll('.editable');
-            editableElements.forEach(el => {
-                el.style.textAlign = alignments[alignmentIndex];
             });
-            saveState();
-        }
-    });
-
-    document.getElementById('changeFont').addEventListener('click', () => {
-        if (selectedElement) {
-            fontIndex = (fontIndex + 1) % fonts.length;
-            const editableElements = selectedElement.querySelectorAll('.editable');
-            editableElements.forEach(el => {
-                el.style.fontFamily = fonts[fontIndex];
+            // Palette preview bar
+            const previewBar = document.createElement('div');
+            previewBar.style.display = 'flex';
+            previewBar.style.height = '28px';
+            previewBar.style.borderRadius = '4px';
+            previewBar.style.overflow = 'hidden';
+            previewBar.style.boxShadow = '0 0 0 1px #ccc';
+            theme.colors.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.style.width = `${100 / theme.colors.length}%`;
+                swatch.style.height = '100%';
+                swatch.style.background = color;
+                previewBar.appendChild(swatch);
             });
-            saveState();
-        }
-    });
-
-    document.getElementById('makeTransparent').addEventListener('click', () => {
-        if (selectedElement) {
-            selectedElement.style.backgroundColor = 'rgba(43, 38, 34, 0)';
-            saveState();
-        }
-    });
-
-    document.getElementById('createColorTransition').addEventListener('click', () => {
-        if (selectedElement) {
-            openColorTransitionPopup();
-        }
-    });
-
-    document.getElementById('createColorGradient').addEventListener('click', () => {
-        if (selectedElement) {
-            openColorGradientPopup();
-        }
-    });
-
-    document.getElementById('createAnimation').addEventListener('click', () => {
-        if (selectedElement) {
-            openAnimationPopup();
-        }
-    });
-
-    document.getElementById('toggleLoop').addEventListener('click', () => {
-        if (selectedElement) {
-            const mediaElement = selectedElement.querySelector('video, audio');
-            if (mediaElement) {
-                mediaElement.loop = !mediaElement.loop;
-                alert(`Looping ${mediaElement.loop ? 'enabled' : 'disabled'} for this element.`);
-            }
-        }
-    });
-
-    document.getElementById('toggleBorder').addEventListener('click', () => {
-        if (selectedElement) {
-            const currentBorder = selectedElement.style.border;
-            selectedElement.style.border = currentBorder === '1px solid #bdc3c7' ? 'none' : '1px solid #bdc3c7';
-        }
-    });
-
-    document.getElementById('moveForward').addEventListener('click', () => {
-        if (selectedElement) {
-            selectedElement.style.zIndex = (parseInt(selectedElement.style.zIndex) || 0) + 1;
-        }
-    });
-
-    document.getElementById('moveBackward').addEventListener('click', () => {
-        if (selectedElement) {
-            selectedElement.style.zIndex = (parseInt(selectedElement.style.zIndex) || 0) - 1;
-        }
-    });
-
-    document.getElementById('deleteElement').addEventListener('click', () => {
-        if (selectedElement) {
-            selectedElement.remove();
-            saveState();
-        }
-    });
-
-    loadBtn.addEventListener('click', () => {
-        fileInput.click();
-    });
-
-    fileInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const savedLayout = JSON.parse(e.target.result);
-                if (savedLayout) {
-                    canvas.innerHTML = '';
-                    savedLayout.forEach(el => {
-                        const element = document.createElement('div');
-                        element.className = 'element';
-                        element.style.left = el.left;
-                        element.style.top = el.top;
-                        element.style.width = el.width;
-                        element.style.height = el.height;
-                        element.style.backgroundColor = el.backgroundColor;
-                        element.style.zIndex = el.zIndex;
-                        element.style.fontSize = el.fontSize;
-                        element.style.color = el.color;
-                        element.style.textAlign = el.textAlign;
-                        element.style.transform = `rotate(${el.rotation}deg)`;
-                        element.style.animation = el.animation;
-                        element.innerHTML = el.content;
-                        
-                        const resizeHandle = document.createElement('div');
-                        resizeHandle.className = 'resize-handle';
-                        element.appendChild(resizeHandle);
-
-                        element.addEventListener('pointerdown', startDragging);
-                        element.addEventListener('contextmenu', showContextMenu);
-                        resizeHandle.addEventListener('pointerdown', startResizing);
-                        const iframeElement = element.querySelector('iframe');
-                        if (iframeElement) {
-                            iframeElement.addEventListener('pointerdown', (e) => e.stopPropagation());
-                        }
-                        const mediaElements = element.querySelectorAll('video, audio');
-                        mediaElements.forEach(media => {
-                            media.addEventListener('pointerdown', (e) => e.stopPropagation());
-                        });
-                        canvas.appendChild(element);
-                    });
-                    alert('Layout loaded!');
-                    saveState();
-                } else {
-                    alert('Invalid layout file.');
-                }
-            };
-            reader.readAsText(file);
-        }
-    });
-
-    clearBtn.addEventListener('click', () => {
-        canvas.innerHTML = '';
-        saveState();
-    });
-
-    exportBtn.addEventListener('click', () => {
-        const elements = Array.from(canvas.children).map(el => ({
-            type: el.firstElementChild ? el.firstElementChild.tagName.toLowerCase() : '',
-            left: el.style.left,
-            top: el.style.top,
-            width: el.style.width,
-            height: el.style.height,
-            backgroundColor: el.style.backgroundColor,
-            content: el.innerHTML,
-            zIndex: el.style.zIndex,
-            fontSize: el.style.fontSize,
-            color: el.style.color,
-            textAlign: el.style.textAlign,
-            rotation: el.dataset.rotation || 0,
-            animation: el.style.animation || ''
-        }));
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(elements, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "prototype.json");
-        document.body.appendChild(downloadAnchorNode); // Required for Firefox
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-    });
-
-    toggleSidebarBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('collapsed');
-        if (sidebar.classList.contains('collapsed')) {
-            canvasContainer.style.marginLeft = '0';
-        } else {
-            canvasContainer.style.marginLeft = '250px';
-        }
-    });
-
-    toolbar.addEventListener('mouseover', () => {
-        toolbar.classList.remove('collapsed');
-    });
-
-    toolbar.addEventListener('mouseout', () => {
-        toolbar.classList.add('collapsed');
-    });
-
-    backgroundBtn.addEventListener('click', () => {
-        openColorPopup();
-        selectedElement = canvas;  // Set the canvas as the selected element to change background color
-    });
-
-    document.getElementById('toggle-grid-btn').addEventListener('click', () => {
-        const grid = document.getElementById('grid');
-        grid.style.display = grid.style.display === 'none' ? 'block' : 'none';
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
-            event.preventDefault();
-            undo(canvas, reattachEventListeners);
-        } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.shiftKey && event.key === 'z'))) {
-            event.preventDefault();
-            redo(canvas, reattachEventListeners);
-        }
-    });
-
-    lockBtn.addEventListener('click', () => {
-        isLocked = !isLocked;
-        lockBtn.textContent = isLocked ? 'Unlock' : 'Lock';
-        const elements = document.querySelectorAll('.element');
-        elements.forEach(el => {
-            el.classList.toggle('locked', isLocked);
-            el.contentEditable = !isLocked;
-            el.querySelectorAll('.editable').forEach(editable => {
-                editable.contentEditable = !isLocked;
-            });
+            row.appendChild(previewBar);
+            const label = document.createElement('span');
+            label.textContent = theme.name;
+            label.style.marginLeft = '12px';
+            row.appendChild(label);
+            swatches.appendChild(row);
         });
-    });
+    }
 
-    function createImageElement(dataUrl) {
-        const element = document.createElement('div');
-        element.className = 'element';
-        element.style.left = '10px';
-        element.style.top = '10px';
-        element.style.width = '200px';
-        element.style.height = '100px';
-        element.style.backgroundColor = 'transparent';
-        element.innerHTML = `<img src="${dataUrl}" alt="Dropped Image">`;
-        attachElementEvents(element);
-        canvas.appendChild(element);
+    // Apply theme to canvas and all elements
+    function applyTheme(idx) {
+        const theme = colorThemes[idx];
+        if (!theme) return;
+        // Set canvas background
+        canvas.style.background = theme.colors[0];
+        // Check if override is selected
+        const forceOverride = themePopup.querySelector('#force-theme-override').checked;
+        // Set all element backgrounds (cycle through theme colors)
+        const elements = canvas.querySelectorAll('.element');
+        elements.forEach((el, i) => {
+            if (forceOverride) {
+                el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
+            } else {
+                // Only update if not transparent
+                if (!el.style.backgroundColor || el.style.backgroundColor === '' || el.style.backgroundColor === 'rgba(43, 38, 34, 0)') {
+                    el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
+                }
+            }
+        });
+        // Save theme in state for undo/redo
         saveState();
     }
 
-    function createVideoElement(dataUrl) {
-        const element = document.createElement('div');
-        element.className = 'element';
-        element.style.left = '10px';
-        element.style.top = '10px';
-        element.style.width = '200px';
-        element.style.height = '100px';
-        element.style.backgroundColor = 'transparent';
-        element.innerHTML = `<video width="100%" height="100%" controls><source src="${dataUrl}" type="video/mp4">Your browser does not support the video tag.</video>`;
-        element.querySelector('video').addEventListener('pointerdown', (e) => e.stopPropagation());
-        attachElementEvents(element);
-        canvas.appendChild(element);
-        saveState();
-    }
-
-    function createAudioElement(dataUrl) {
-        const element = document.createElement('div');
-        element.className = 'element';
-        element.style.left = '10px';
-        element.style.top = '10px';
-        element.style.width = '200px';
-        element.style.height = '100px';
-        element.style.backgroundColor = 'transparent';
-        element.innerHTML = `<audio controls><source src="${dataUrl}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
-        element.querySelector('audio').addEventListener('pointerdown', (e) => e.stopPropagation());
-        attachElementEvents(element);
-        canvas.appendChild(element);
-        saveState();
-    }
-
-    function attachElementEvents(element) {
-        const resizeHandle = document.createElement('div');
-        resizeHandle.className = 'resize-handle';
-        element.appendChild(resizeHandle);
-
-        element.addEventListener('pointerdown', startDragging);
-        element.addEventListener('contextmenu', showContextMenu);
-        resizeHandle.addEventListener('pointerdown', startResizing);
-    }
+    // Initial render
+    renderThemeSwatches();
 });
