@@ -358,6 +358,9 @@ document.addEventListener('DOMContentLoaded', () => {
         element.addEventListener('contextmenu', showContextMenu);
         resizeHandle.addEventListener('pointerdown', startResizing);
         canvas.appendChild(element);
+
+        // Update resize handles visibility based on initial lock state
+        updateResizeHandles();
     }
 
     function startDragging(e) {
@@ -686,6 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- GLOBAL INTERVAL MAPS FOR ENTITY-COMPONENT STYLE ---
     const colorTransitionIntervals = new Map(); // uid -> intervalId
     const gradientAnimIntervals = new Map(); // uid -> intervalId
+    const elementAnimIntervals = new Map(); // uid -> intervalId (for scale/move/rotate etc)
 
     // --- Helper: Get UID for an element ---
     function getElementUID(el) {
@@ -696,7 +700,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearAllIntervalsForElement(el) {
         const uid = getElementUID(el);
         if (!uid) return;
-        clearIntervalsForUID(uid, colorTransitionIntervals, gradientAnimIntervals);
+        clearIntervalsForUID(uid, colorTransitionIntervals, gradientAnimIntervals, elementAnimIntervals);
+    }
+
+    // --- Helper: Clear all intervals for a UID from all Maps ---
+    function clearIntervalsForUID(uid, ...intervalMaps) {
+        intervalMaps.forEach(map => {
+            if (map.has(uid)) {
+                clearInterval(map.get(uid));
+                map.delete(uid);
+            }
+        });
     }
 
     // --- Patch: On theme override, clear all intervals ---
@@ -709,90 +723,77 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(intervalId);
         });
         gradientAnimIntervals.clear();
+        elementAnimIntervals.forEach((intervalId, uid) => {
+            clearInterval(intervalId);
+        });
+        elementAnimIntervals.clear();
     }
 
-    // --- Improved Color Transition: Each element cycles independently ---
-    applyTransitionBtn.addEventListener('click', () => {
+    // --- Animation Popup: Apply scale/move/rotate animation using UID-based interval management ---
+    applyAnimationBtn.addEventListener('click', () => {
         if (selectedElement) {
-            const startColor = startColorInput.value;
-            const endColor = endColorInput.value;
-            const transitionTime = transitionTimeInput.value;
             const uid = getElementUID(selectedElement);
-
-            selectedElement.style.transition = `background-color ${transitionTime}s ease-in-out`;
-            selectedElement.style.backgroundColor = startColor;
-            selectedElement.dataset.colorTransition = JSON.stringify({
-                startColor,
-                endColor,
-                transitionTime
-            });
-
-            // --- Use global interval map with helper ---
-            if (colorTransitionIntervals.has(uid)) {
-                clearInterval(colorTransitionIntervals.get(uid));
+            // Clean up any previous animation interval for this element
+            if (elementAnimIntervals.has(uid)) {
+                clearInterval(elementAnimIntervals.get(uid));
+                elementAnimIntervals.delete(uid);
             }
-            const intervalId = startColorTransitionAnimation({
-                element: selectedElement,
-                startColor,
-                endColor,
-                transitionTime,
-                onCleanup: () => colorTransitionIntervals.delete(uid)
-            });
-            colorTransitionIntervals.set(uid, intervalId);
-        }
-        closeColorTransitionPopup();
-    });
-
-    // --- Improved Color Gradient: Use global interval map and helper ---
-    applyGradientBtn.addEventListener('click', () => {
-        if (selectedElement) {
-            const startColor = startGradientColorInput.value;
-            const endColor = endGradientColorInput.value;
-            const direction = gradientDirectionSelect.value || 'to right';
-            const gradientTypeSelect = document.getElementById('gradient-type');
-            const gradientType = gradientTypeSelect ? gradientTypeSelect.value : 'linear';
-            const gradientAnimSelect = document.getElementById('gradient-anim-style');
-            const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
-            let gradient;
-            const uid = getElementUID(selectedElement);
-            // --- Clean up previous interval if any ---
-            if (gradientAnimIntervals.has(uid)) {
-                clearInterval(gradientAnimIntervals.get(uid));
+            const type = animationTypeSelect.value;
+            const preset = animationPresetSelect.value;
+            const duration = parseFloat(animationDurationInput.value) || 2;
+            let intervalId;
+            if (type === 'scale') {
+                let scale = 1, direction = 1;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    scale += direction * 0.02;
+                    if (scale > 1.2) direction = -1;
+                    if (scale < 0.8) direction = 1;
+                    selectedElement.style.transform = `scale(${scale})`;
+                }, 1000 * duration / 40);
+            } else if (type === 'move') {
+                let pos = 0, dir = 1;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    pos += dir * 2;
+                    if (pos > 40) dir = -1;
+                    if (pos < -40) dir = 1;
+                    selectedElement.style.transform = `translateX(${pos}px)`;
+                }, 1000 * duration / 40);
+            } else if (type === 'rotate') {
+                let angle = 0;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    angle = (angle + 5) % 360;
+                    selectedElement.style.transform = `rotate(${angle}deg)`;
+                }, 1000 * duration / 40);
             }
-            if (gradientType === 'radial') {
-                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
-            } else if (gradientType === 'conic') {
-                let angle = 'from 0deg';
-                if (direction && direction.match(/\d+deg/)) {
-                    angle = `from ${direction}`;
-                }
-                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
-            } else {
-                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+            if (intervalId) {
+                elementAnimIntervals.set(uid, intervalId);
             }
-            selectedElement.style.background = gradient;
-            if (animStyle === 'rotate' || animStyle === 'color-shift') {
-                const intervalId = startGradientAnimation({
-                    element: selectedElement,
-                    startColor,
-                    endColor,
-                    direction,
-                    gradientType,
-                    animStyle
-                });
-                gradientAnimIntervals.set(uid, intervalId);
-            }
-            selectedElement.dataset.colorGradient = JSON.stringify({
-                startColor,
-                endColor,
-                direction,
-                gradientType,
-                animStyle
+            // Store animation info for export/undo/redo
+            selectedElement.dataset.elementAnimation = JSON.stringify({
+                type, preset, duration
             });
             if (typeof saveState === 'function' && canvas) saveState();
         }
-        closeColorGradientPopup();
+        closeAnimationPopup();
     });
+
+    // --- On element removal, theme override, or undo/redo, always call clearAllIntervalsForElement(el) ---
+    // ...existing code...
 
     // Setup popups
     setupPopupEvents({
@@ -1061,13 +1062,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set all element backgrounds (cycle through theme colors)
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
-            clearAllElementIntervals(el); // <-- clear all intervals for this element
-            // --- Theme override: stop animated gradients and remove background ---
-            if (el._gradientAnimInterval) {
-                clearInterval(el._gradientAnimInterval);
-                el._gradientAnimInterval = null;
-            }
+            // --- Always clear all intervals for this element (including gradients/animations) ---
+            clearAllIntervalsForElement(el);
+            // --- Remove any gradient/animation dataset and style ---
+            delete el.dataset.colorTransition;
+            delete el.dataset.colorGradient;
             el.style.background = '';
+            el.style.backgroundColor = '';
             // --- Set background color ---
             let bgColor = forceOverride
                 ? theme.colors[(i + 1) % theme.colors.length]
@@ -1248,4 +1249,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         closeColorGradientPopup();
     });
+
+    // --- Lock/Unlock Functionality ---
+    if (lockBtn) {
+        lockBtn.addEventListener('click', () => {
+            isLocked = !isLocked;
+            lockBtn.classList.toggle('active', isLocked);
+            // Hide or show all resize handles
+            const handles = canvas.querySelectorAll('.resize-handle');
+            handles.forEach(handle => {
+                handle.style.display = isLocked ? 'none' : '';
+            });
+            // Optionally visually indicate locked state
+            canvas.classList.toggle('locked', isLocked);
+        });
+    }
+
+    // --- Toggle Grid Functionality ---
+    if (backgroundBtn) {
+        backgroundBtn.addEventListener('click', () => {
+            gridEnabled = !gridEnabled;
+            backgroundBtn.classList.toggle('active', gridEnabled);
+            // Optionally add/remove a grid overlay (CSS or canvas background)
+            if (gridEnabled) {
+                canvas.style.backgroundImage =
+                    'linear-gradient(to right, #ccc 1px, transparent 1px), linear-gradient(to bottom, #ccc 1px, transparent 1px)';
+                canvas.style.backgroundSize = '20px 20px';
+            } else {
+                canvas.style.backgroundImage = '';
+                canvas.style.backgroundSize = '';
+            }
+        });
+    }
+
+    // On initial load, set resize handle visibility based on lock state
+    function updateResizeHandles() {
+        const handles = canvas.querySelectorAll('.resize-handle');
+        handles.forEach(handle => {
+            handle.style.display = isLocked ? 'none' : '';
+        });
+    }
+    updateResizeHandles();
 });
