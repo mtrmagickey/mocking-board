@@ -19,4 +19,82 @@ export function getRandomColor() {
     return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// --- UID-based Animation Helpers ---
+// These helpers do NOT store intervals themselves; caller must store intervalId in a Map keyed by uid.
+
+/**
+ * Start a color transition animation for an element, toggling between two colors.
+ * Returns the intervalId. Caller must store/clear this in a Map keyed by uid.
+ */
+export function startColorTransitionAnimation({ element, startColor, endColor, transitionTime, onCleanup }) {
+    if (!element) return null;
+    let isStartColor = true;
+    element.style.transition = `background-color ${transitionTime}s ease-in-out`;
+    element.style.backgroundColor = startColor;
+    const intervalId = setInterval(() => {
+        if (!document.body.contains(element)) {
+            clearInterval(intervalId);
+            if (typeof onCleanup === 'function') onCleanup();
+            return;
+        }
+        element.style.backgroundColor = isStartColor ? endColor : startColor;
+        isStartColor = !isStartColor;
+    }, transitionTime * 1000);
+    return intervalId;
+}
+
+/**
+ * Start a gradient animation for an element. Supports 'rotate' and 'color-shift' styles.
+ * Returns the intervalId. Caller must store/clear this in a Map keyed by uid.
+ */
+export function startGradientAnimation({ element, startColor, endColor, direction, gradientType, animStyle }) {
+    if (!element) return null;
+    let angleVal = 0;
+    let isStart = true;
+    let intervalId = null;
+    if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
+        intervalId = setInterval(() => {
+            angleVal = (angleVal + 2) % 360;
+            if (!document.body.contains(element)) {
+                clearInterval(intervalId);
+                return;
+            }
+            if (gradientType === 'conic') {
+                element.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
+            } else {
+                element.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
+            }
+        }, 50);
+    } else if (animStyle === 'color-shift') {
+        intervalId = setInterval(() => {
+            if (!document.body.contains(element)) {
+                clearInterval(intervalId);
+                return;
+            }
+            if (gradientType === 'radial') {
+                element.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+            } else if (gradientType === 'conic') {
+                element.style.background = `conic-gradient(from 0deg, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+            } else {
+                element.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
+            }
+            isStart = !isStart;
+        }, 1000);
+    }
+    return intervalId;
+}
+
+/**
+ * Cleanup utility: clear intervals for a given UID from provided Maps.
+ */
+export function clearIntervalsForUID(uid, ...intervalMaps) {
+    if (!uid) return;
+    intervalMaps.forEach(map => {
+        if (map && map.has(uid)) {
+            clearInterval(map.get(uid));
+            map.delete(uid);
+        }
+    });
+}
+
 // Add more animation/gradient helpers as needed

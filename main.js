@@ -1,6 +1,6 @@
 import { createElement as createElementFromManager } from './elementManager.js';
 import { saveState, undo, redo } from './stateManager.js';
-import { hexToRgba, rgbToHex, getRandomColor } from './colorAnimationUtils.js';
+import { hexToRgba, rgbToHex, getRandomColor, startColorTransitionAnimation, startGradientAnimation, clearIntervalsForUID } from './colorAnimationUtils.js';
 import { openPopup, closePopup, setupPopupEvents } from './popupManager.js';
 import { startDragging, startResizing } from './dragResizeManager.js';
 import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
@@ -269,6 +269,15 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.display = 'none';
     });
 
+    function generateUID(length = 9) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let uid = '';
+        for (let i = 0; i < length; i++) {
+            uid += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return uid;
+    }
+
     function createElement(type) {
         saveState();
 
@@ -283,6 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Assign data-type and unique data-id at creation ---
         element.setAttribute('data-type', type);
         element.setAttribute('data-id', 'el-' + Date.now() + '-' + Math.floor(Math.random() * 1000000));
+        // --- Assign unique 9-char alphanumeric UID ---
+        element.setAttribute('data-uid', generateUID());
 
         switch(type) {
             case 'header':
@@ -612,8 +623,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fontColorPicker.addEventListener('input', (event) => {
         if (selectedElement) {
-            selectedElement.style.color = event.target.value;
-            saveState();
+            // Set color on all .editable children if present, else on the element
+            const editableEls = selectedElement.querySelectorAll('.editable');
+            if (editableEls.length > 0) {
+                editableEls.forEach(el => {
+                    el.style.color = event.target.value;
+                });
+            } else {
+                selectedElement.style.color = event.target.value;
+            }
+            if (typeof saveState === 'function' && canvas) saveState();
         }
     });
 
@@ -664,68 +683,115 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- GLOBAL INTERVAL MAPS FOR ENTITY-COMPONENT STYLE ---
+    const colorTransitionIntervals = new Map(); // uid -> intervalId
+    const gradientAnimIntervals = new Map(); // uid -> intervalId
+
+    // --- Helper: Get UID for an element ---
+    function getElementUID(el) {
+        return el && el.getAttribute && el.getAttribute('data-uid');
+    }
+
+    // --- Helper: Clear all intervals for an element by UID ---
+    function clearAllIntervalsForElement(el) {
+        const uid = getElementUID(el);
+        if (!uid) return;
+        clearIntervalsForUID(uid, colorTransitionIntervals, gradientAnimIntervals);
+    }
+
+    // --- Patch: On theme override, clear all intervals ---
+    function clearAllIntervals() {
+        colorTransitionIntervals.forEach((intervalId, uid) => {
+            clearInterval(intervalId);
+        });
+        colorTransitionIntervals.clear();
+        gradientAnimIntervals.forEach((intervalId, uid) => {
+            clearInterval(intervalId);
+        });
+        gradientAnimIntervals.clear();
+    }
+
     // --- Improved Color Transition: Each element cycles independently ---
     applyTransitionBtn.addEventListener('click', () => {
         if (selectedElement) {
             const startColor = startColorInput.value;
             const endColor = endColorInput.value;
             const transitionTime = transitionTimeInput.value;
+            const uid = getElementUID(selectedElement);
 
             selectedElement.style.transition = `background-color ${transitionTime}s ease-in-out`;
             selectedElement.style.backgroundColor = startColor;
-
-            // Store transition info for stateManager
             selectedElement.dataset.colorTransition = JSON.stringify({
                 startColor,
                 endColor,
                 transitionTime
             });
 
-            // --- Patch: Store interval and state per element robustly ---
-            import('./stateManager.js').then(({ setColorTransitionInterval, clearColorTransitionInterval }) => {
-                clearColorTransitionInterval(selectedElement);
-                // Store isStartColor as a property on the element
-                selectedElement._isStartColor = true;
-                // Store intervalId as a property on the element
-                if (selectedElement._transitionIntervalId) {
-                    clearInterval(selectedElement._transitionIntervalId);
-                }
-                // Remove any previous transition interval from all elements (defensive)
-                document.querySelectorAll('.element').forEach(el => {
-                    if (el !== selectedElement && el._transitionIntervalId && !document.body.contains(el)) {
-                        clearInterval(el._transitionIntervalId);
-                        el._transitionIntervalId = null;
-                    }
-                });
-                const intervalId = setInterval(() => {
-                    if (!document.body.contains(selectedElement)) {
-                        clearInterval(intervalId);
-                        return;
-                    }
-                    const isStart = selectedElement._isStartColor;
-                    selectedElement.style.backgroundColor = isStart ? endColor : startColor;
-                    selectedElement._isStartColor = !isStart;
-                }, transitionTime * 1000);
-                selectedElement._transitionIntervalId = intervalId;
-                setColorTransitionInterval(selectedElement, intervalId);
+            // --- Use global interval map with helper ---
+            if (colorTransitionIntervals.has(uid)) {
+                clearInterval(colorTransitionIntervals.get(uid));
+            }
+            const intervalId = startColorTransitionAnimation({
+                element: selectedElement,
+                startColor,
+                endColor,
+                transitionTime,
+                onCleanup: () => colorTransitionIntervals.delete(uid)
             });
+            colorTransitionIntervals.set(uid, intervalId);
         }
         closeColorTransitionPopup();
     });
 
-    // --- Patch undo/redo to restore color transitions ---
-    document.addEventListener('keydown', (event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
-            event.preventDefault();
-            import('./stateManager.js').then(({ undo, setColorTransitionInterval, clearColorTransitionInterval }) => {
-                undo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval);
+    // --- Improved Color Gradient: Use global interval map and helper ---
+    applyGradientBtn.addEventListener('click', () => {
+        if (selectedElement) {
+            const startColor = startGradientColorInput.value;
+            const endColor = endGradientColorInput.value;
+            const direction = gradientDirectionSelect.value || 'to right';
+            const gradientTypeSelect = document.getElementById('gradient-type');
+            const gradientType = gradientTypeSelect ? gradientTypeSelect.value : 'linear';
+            const gradientAnimSelect = document.getElementById('gradient-anim-style');
+            const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
+            let gradient;
+            const uid = getElementUID(selectedElement);
+            // --- Clean up previous interval if any ---
+            if (gradientAnimIntervals.has(uid)) {
+                clearInterval(gradientAnimIntervals.get(uid));
+            }
+            if (gradientType === 'radial') {
+                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
+            } else if (gradientType === 'conic') {
+                let angle = 'from 0deg';
+                if (direction && direction.match(/\d+deg/)) {
+                    angle = `from ${direction}`;
+                }
+                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
+            } else {
+                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+            }
+            selectedElement.style.background = gradient;
+            if (animStyle === 'rotate' || animStyle === 'color-shift') {
+                const intervalId = startGradientAnimation({
+                    element: selectedElement,
+                    startColor,
+                    endColor,
+                    direction,
+                    gradientType,
+                    animStyle
+                });
+                gradientAnimIntervals.set(uid, intervalId);
+            }
+            selectedElement.dataset.colorGradient = JSON.stringify({
+                startColor,
+                endColor,
+                direction,
+                gradientType,
+                animStyle
             });
-        } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.shiftKey && event.key === 'z'))) {
-            event.preventDefault();
-            import('./stateManager.js').then(({ redo, setColorTransitionInterval, clearColorTransitionInterval }) => {
-                redo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval);
-            });
+            if (typeof saveState === 'function' && canvas) saveState();
         }
+        closeColorGradientPopup();
     });
 
     // Setup popups
@@ -995,6 +1061,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set all element backgrounds (cycle through theme colors)
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
+            clearAllElementIntervals(el); // <-- clear all intervals for this element
+            // --- Theme override: stop animated gradients and remove background ---
+            if (el._gradientAnimInterval) {
+                clearInterval(el._gradientAnimInterval);
+                el._gradientAnimInterval = null;
+            }
+            el.style.background = '';
             // --- Set background color ---
             let bgColor = forceOverride
                 ? theme.colors[(i + 1) % theme.colors.length]
@@ -1040,13 +1113,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loadBtn) {
         loadBtn.addEventListener('click', () => {
             fileInput.click();
+            if (typeof saveState === 'function' && canvas) saveState();
         });
     }
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             if (confirm('Clear the canvas? This cannot be undone.')) {
                 canvas.innerHTML = '';
-                saveState();
+                if (typeof saveState === 'function' && canvas) saveState();
             }
         });
     }
@@ -1133,6 +1207,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 angleVal = 0;
                 selectedElement._gradientAnimInterval = setInterval(() => {
                     angleVal = (angleVal + 2) % 360;
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(selectedElement._gradientAnimInterval);
+                        selectedElement._gradientAnimInterval = null;
+                        return;
+                    }
                     if (gradientType === 'conic') {
                         selectedElement.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
                     } else {
@@ -1140,9 +1219,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }, 50);
             } else if (animStyle === 'color-shift') {
-                // Simple color shift: swap start/end every second
                 let isStart = true;
                 selectedElement._gradientAnimInterval = setInterval(() => {
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(selectedElement._gradientAnimInterval);
+                        selectedElement._gradientAnimInterval = null;
+                        return;
+                    }
                     if (gradientType === 'radial') {
                         selectedElement.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
                     } else if (gradientType === 'conic') {
@@ -1161,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 gradientType,
                 animStyle
             });
-            saveState();
+            if (typeof saveState === 'function' && canvas) saveState();
         }
         closeColorGradientPopup();
     });

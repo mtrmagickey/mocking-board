@@ -1,98 +1,127 @@
 // stateManager.js
 // Handles undo/redo, save/load, and export/import for the canvas
 
+import { startColorTransitionAnimation, startGradientAnimation } from './colorAnimationUtils.js';
+
 let undoStack = [];
 let redoStack = [];
 
-// --- Enhanced State Management for Color Transitions ---
+// --- Enhanced State Management for Color Transitions and Gradients by UID ---
 
-// Helper to get all color transition info from the canvas
-function getColorTransitionStates(canvas) {
+// Helper to get all per-element state (color transitions, gradients, etc.) by UID
+function getElementStatesByUID(canvas) {
     const states = [];
     canvas.querySelectorAll('.element').forEach(el => {
-        if (el.dataset.colorTransition) {
-            try {
-                const data = JSON.parse(el.dataset.colorTransition);
-                states.push({
-                    selector: getElementSelector(el, canvas),
-                    ...data
-                });
-            } catch {}
-        }
+        const uid = el.getAttribute('data-uid');
+        if (!uid) return;
+        const state = {
+            uid,
+            colorTransition: el.dataset.colorTransition ? JSON.parse(el.dataset.colorTransition) : null,
+            colorGradient: el.dataset.colorGradient ? JSON.parse(el.dataset.colorGradient) : null,
+            // Add more per-element state here as needed
+        };
+        states.push(state);
     });
     return states;
 }
 
-// Helper to set color transition info on elements
-function restoreColorTransitions(canvas, colorStates, setColorTransitionInterval, clearColorTransitionInterval) {
-    colorStates.forEach(state => {
-        const el = queryElementBySelector(canvas, state.selector);
-        if (el) {
-            el.dataset.colorTransition = JSON.stringify({
-                startColor: state.startColor,
-                endColor: state.endColor,
-                transitionTime: state.transitionTime
+// Helper to restore all per-element state by UID
+// Accepts Maps for UID-based interval management
+function restoreElementStatesByUID(canvas, states, colorTransitionIntervals, gradientAnimIntervals) {
+    states.forEach(state => {
+        const el = canvas.querySelector(`.element[data-uid='${state.uid}']`);
+        if (!el) return;
+        // Restore color transition
+        if (state.colorTransition) {
+            el.dataset.colorTransition = JSON.stringify(state.colorTransition);
+            // Cleanup previous interval
+            if (colorTransitionIntervals.has(state.uid)) {
+                clearInterval(colorTransitionIntervals.get(state.uid));
+                colorTransitionIntervals.delete(state.uid);
+            }
+            const intervalId = startColorTransitionAnimation({
+                element: el,
+                startColor: state.colorTransition.startColor,
+                endColor: state.colorTransition.endColor,
+                transitionTime: state.colorTransition.transitionTime,
+                onCleanup: () => colorTransitionIntervals.delete(state.uid)
             });
-            clearColorTransitionInterval(el);
-            let isStartColor = state.isStartColor || true;
-            el.style.transition = `background-color ${state.transitionTime}s ease-in-out`;
-            el.style.backgroundColor = isStartColor ? state.startColor : state.endColor;
-            const intervalId = setInterval(() => {
-                el.style.backgroundColor = isStartColor ? state.endColor : state.startColor;
-                isStartColor = !isStartColor;
-            }, state.transitionTime * 1000);
-            setColorTransitionInterval(el, intervalId);
+            colorTransitionIntervals.set(state.uid, intervalId);
+        }
+        // Restore color gradient animation
+        if (state.colorGradient) {
+            el.dataset.colorGradient = JSON.stringify(state.colorGradient);
+            if (gradientAnimIntervals.has(state.uid)) {
+                clearInterval(gradientAnimIntervals.get(state.uid));
+                gradientAnimIntervals.delete(state.uid);
+            }
+            const { startColor, endColor, direction, gradientType, animStyle } = state.colorGradient;
+            let gradient;
+            if (gradientType === 'radial') {
+                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
+            } else if (gradientType === 'conic') {
+                let angle = 'from 0deg';
+                if (direction && direction.match(/\d+deg/)) {
+                    angle = `from ${direction}`;
+                }
+                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
+            } else {
+                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+            }
+            el.style.background = gradient;
+            if (animStyle === 'rotate' || animStyle === 'color-shift') {
+                const intervalId = startGradientAnimation({
+                    element: el,
+                    startColor,
+                    endColor,
+                    direction,
+                    gradientType,
+                    animStyle
+                });
+                gradientAnimIntervals.set(state.uid, intervalId);
+            }
         }
     });
 }
 
-// Helper to get a unique selector for an element (by index)
-function getElementSelector(el, canvas) {
-    const elements = Array.from(canvas.querySelectorAll('.element'));
-    return elements.indexOf(el);
-}
-function queryElementBySelector(canvas, selector) {
-    return canvas.querySelectorAll('.element')[selector] || null;
-}
-
-// Override saveState to include color transition info
+// Override saveState to include all per-element state by UID
 export function saveState(canvas) {
-    const colorTransitions = getColorTransitionStates(canvas);
+    const elementStates = getElementStatesByUID(canvas);
     const state = JSON.stringify({
         html: canvas.innerHTML,
-        colorTransitions
+        elementStates
     });
     undoStack.push(state);
     redoStack.length = 0;
 }
 
-// Override undo/redo to restore color transitions
-export function undo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval) {
+// Override undo/redo to restore all per-element state by UID
+export function undo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals) {
     if (undoStack.length > 0) {
         redoStack.push(JSON.stringify({
             html: canvas.innerHTML,
-            colorTransitions: getColorTransitionStates(canvas)
+            elementStates: getElementStatesByUID(canvas)
         }));
         const prevState = JSON.parse(undoStack.pop());
         canvas.innerHTML = prevState.html;
         if (reattachEventListeners) reattachEventListeners();
-        if (prevState.colorTransitions && setColorTransitionInterval && clearColorTransitionInterval) {
-            restoreColorTransitions(canvas, prevState.colorTransitions, setColorTransitionInterval, clearColorTransitionInterval);
+        if (prevState.elementStates) {
+            restoreElementStatesByUID(canvas, prevState.elementStates, colorTransitionIntervals, gradientAnimIntervals);
         }
     }
 }
 
-export function redo(canvas, reattachEventListeners, setColorTransitionInterval, clearColorTransitionInterval) {
+export function redo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals) {
     if (redoStack.length > 0) {
         undoStack.push(JSON.stringify({
             html: canvas.innerHTML,
-            colorTransitions: getColorTransitionStates(canvas)
+            elementStates: getElementStatesByUID(canvas)
         }));
         const nextState = JSON.parse(redoStack.pop());
         canvas.innerHTML = nextState.html;
         if (reattachEventListeners) reattachEventListeners();
-        if (nextState.colorTransitions && setColorTransitionInterval && clearColorTransitionInterval) {
-            restoreColorTransitions(canvas, nextState.colorTransitions, setColorTransitionInterval, clearColorTransitionInterval);
+        if (nextState.elementStates) {
+            restoreElementStatesByUID(canvas, nextState.elementStates, colorTransitionIntervals, gradientAnimIntervals);
         }
     }
 }
@@ -104,19 +133,4 @@ export function clearState() {
 
 export function getStateStacks() {
     return { undoStack, redoStack };
-}
-
-// Track color transition intervals for cleanup
-const colorTransitionIntervals = new WeakMap();
-
-export function setColorTransitionInterval(element, intervalId) {
-    colorTransitionIntervals.set(element, intervalId);
-}
-
-export function clearColorTransitionInterval(element) {
-    const intervalId = colorTransitionIntervals.get(element);
-    if (intervalId) {
-        clearInterval(intervalId);
-        colorTransitionIntervals.delete(element);
-    }
 }

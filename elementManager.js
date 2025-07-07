@@ -1,6 +1,16 @@
 // elementManager.js
 // Handles creation and manipulation of canvas elements
 
+// Helper to generate a unique 9-character alphanumeric UID
+function generateUID(length = 9) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let uid = '';
+    for (let i = 0; i < length; i++) {
+        uid += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return uid;
+}
+
 export function createElement(type, options = {}) {
     const element = document.createElement('div');
     element.className = 'element';
@@ -9,6 +19,13 @@ export function createElement(type, options = {}) {
     element.style.width = options.width || '200px';
     element.style.height = options.height || '100px';
     element.style.backgroundColor = options.backgroundColor || getRandomColor();
+
+    // --- Assign data-type, unique data-id, and unique 9-char alphanumeric UID ---
+    element.setAttribute('data-type', type);
+    element.setAttribute('data-id', 'el-' + Date.now() + '-' + Math.floor(Math.random() * 1000000));
+    if (!element.hasAttribute('data-uid')) {
+        element.setAttribute('data-uid', generateUID());
+    }
 
     switch(type) {
         case 'header':
@@ -53,6 +70,20 @@ export function createElement(type, options = {}) {
     resizeHandle.className = 'resize-handle';
     element.appendChild(resizeHandle);
     return element;
+}
+
+// Remove element with per-element cleanup (intervals/listeners)
+// Pass a cleanup callback (e.g., clearAllIntervalsForElement) to ensure robust cleanup
+// The cleanup callback should use UID-based cleanup for any per-element timers/animations.
+// Example usage:
+//   removeElement(element, el => clearAllIntervalsForElement(el));
+export function removeElement(element, cleanupCallback) {
+    if (typeof cleanupCallback === 'function') {
+        cleanupCallback(element);
+    }
+    if (element && element.parentNode) {
+        element.parentNode.removeChild(element);
+    }
 }
 
 function getRandomColor() {
