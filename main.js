@@ -55,6 +55,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const gradientDirectionSelect = document.getElementById('gradient-direction');
     const applyGradientBtn = document.getElementById('apply-gradient-btn');
 
+    // --- Add gradient type selector if not present ---
+    let gradientTypeSelect = document.getElementById('gradient-type');
+    if (!gradientTypeSelect && colorGradientPopup) {
+        gradientTypeSelect = document.createElement('select');
+        gradientTypeSelect.id = 'gradient-type';
+        gradientTypeSelect.style.marginBottom = '8px';
+        gradientTypeSelect.setAttribute('aria-label', 'Gradient Type');
+        [
+            { value: 'linear', label: 'Linear' },
+            { value: 'radial', label: 'Radial' },
+            { value: 'conic', label: 'Conic (Swirl)' }
+        ].forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            gradientTypeSelect.appendChild(option);
+        });
+        // Insert at the top of the popup
+        colorGradientPopup.insertBefore(gradientTypeSelect, colorGradientPopup.firstChild);
+    }
+
     let draggedElement = null;
     let offset = { x: 0, y: 0 };
     let selectedElement = null;
@@ -1052,4 +1073,40 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
         });
     }
+
+    // --- Apply Color Gradient: Set artistic gradient background on selected element ---
+    applyGradientBtn.addEventListener('click', () => {
+        if (selectedElement) {
+            const startColor = startGradientColorInput.value;
+            const endColor = endGradientColorInput.value;
+            const direction = gradientDirectionSelect.value || 'to right';
+            // --- Artistic gradient type support ---
+            const gradientTypeSelect = document.getElementById('gradient-type');
+            const gradientType = gradientTypeSelect ? gradientTypeSelect.value : 'linear';
+            let gradient;
+            if (gradientType === 'radial') {
+                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
+            } else if (gradientType === 'conic') {
+                // For conic, use direction as angle if possible, fallback to 'from 0deg'
+                let angle = 'from 0deg';
+                if (direction && direction.match(/\d+deg/)) {
+                    angle = `from ${direction}`;
+                }
+                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
+            } else {
+                // Default to linear
+                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+            }
+            selectedElement.style.background = gradient;
+            // Store gradient info for export/undo/redo
+            selectedElement.dataset.colorGradient = JSON.stringify({
+                startColor,
+                endColor,
+                direction,
+                gradientType
+            });
+            saveState();
+        }
+        closeColorGradientPopup();
+    });
 });
