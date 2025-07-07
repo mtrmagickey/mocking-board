@@ -631,17 +631,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 transitionTime
             });
 
-            // --- Patch: Store interval and state per element ---
+            // --- Patch: Store interval and state per element robustly ---
             import('./stateManager.js').then(({ setColorTransitionInterval, clearColorTransitionInterval }) => {
                 clearColorTransitionInterval(selectedElement);
                 // Store isStartColor as a property on the element
                 selectedElement._isStartColor = true;
+                // Store intervalId as a property on the element
+                if (selectedElement._transitionIntervalId) {
+                    clearInterval(selectedElement._transitionIntervalId);
+                }
                 const intervalId = setInterval(() => {
-                    if (!selectedElement) return;
+                    if (!document.body.contains(selectedElement)) {
+                        clearInterval(intervalId);
+                        return;
+                    }
                     const isStart = selectedElement._isStartColor;
                     selectedElement.style.backgroundColor = isStart ? endColor : startColor;
                     selectedElement._isStartColor = !isStart;
                 }, transitionTime * 1000);
+                selectedElement._transitionIntervalId = intervalId;
                 setColorTransitionInterval(selectedElement, intervalId);
             });
         }
@@ -862,8 +870,8 @@ document.addEventListener('DOMContentLoaded', () => {
             row.style.alignItems = 'center';
             row.style.cursor = 'pointer';
             row.style.outline = 'none';
-            row.style.gap = '8px';
-            row.style.padding = '4px 0';
+            row.style.gap = '4px'; // Reduced gap
+            row.style.padding = '2px 0'; // Reduced padding
             row.addEventListener('click', () => applyTheme(idx));
             row.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -874,7 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Palette preview bar
             const previewBar = document.createElement('div');
             previewBar.style.display = 'flex';
-            previewBar.style.height = '28px';
+            previewBar.style.height = '20px'; // Reduced height
             previewBar.style.borderRadius = '4px';
             previewBar.style.overflow = 'hidden';
             previewBar.style.boxShadow = '0 0 0 1px #ccc';
@@ -888,10 +896,21 @@ document.addEventListener('DOMContentLoaded', () => {
             row.appendChild(previewBar);
             const label = document.createElement('span');
             label.textContent = theme.name;
-            label.style.marginLeft = '12px';
+            label.style.marginLeft = '8px';
             row.appendChild(label);
             swatches.appendChild(row);
         });
+    }
+
+    // Utility: get best contrast color (black or white) for a given bg
+    function getContrastYIQ(hexcolor) {
+        hexcolor = hexcolor.replace('#', '');
+        if (hexcolor.length === 3) hexcolor = hexcolor.split('').map(x => x + x).join('');
+        const r = parseInt(hexcolor.substr(0,2),16);
+        const g = parseInt(hexcolor.substr(2,2),16);
+        const b = parseInt(hexcolor.substr(4,2),16);
+        const yiq = ((r*299)+(g*587)+(b*114))/1000;
+        return (yiq >= 128) ? '#111' : '#fff';
     }
 
     // Apply theme to canvas and all elements
@@ -906,18 +925,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
             // --- Set background color ---
-            if (forceOverride) {
-                el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
-            } else {
-                // Only update if not transparent
-                if (!el.style.backgroundColor || el.style.backgroundColor === '' || el.style.backgroundColor === 'rgba(43, 38, 34, 0)') {
-                    el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
-                }
-            }
+            let bgColor = forceOverride
+                ? theme.colors[(i + 1) % theme.colors.length]
+                : (!el.style.backgroundColor || el.style.backgroundColor === '' || el.style.backgroundColor === 'rgba(43, 38, 34, 0)')
+                    ? theme.colors[(i + 1) % theme.colors.length]
+                    : el.style.backgroundColor;
+            el.style.backgroundColor = bgColor;
             // --- Set text color for .editable and text children ---
             const textEls = el.querySelectorAll('.editable, h1, h2, h3, h4, h5, h6, p, span');
-            textEls.forEach((txt, j) => {
-                txt.style.color = theme.colors[(j + 2) % theme.colors.length];
+            const contrastColor = getContrastYIQ(bgColor);
+            textEls.forEach(txt => {
+                txt.style.color = contrastColor;
             });
             // --- Set SVG fill/stroke ---
             const svg = el.querySelector('svg');
@@ -935,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const btns = el.querySelectorAll('button');
             btns.forEach((btn, m) => {
                 btn.style.backgroundColor = theme.colors[(m + 3) % theme.colors.length];
-                btn.style.color = theme.colors[(m + 4) % theme.colors.length];
+                btn.style.color = getContrastYIQ(theme.colors[(m + 3) % theme.colors.length]);
             });
             // --- Set border color ---
             el.style.borderColor = theme.colors[(i + 2) % theme.colors.length];
