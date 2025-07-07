@@ -631,13 +631,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 transitionTime
             });
 
-            // Clear any previous interval for this element
+            // --- Patch: Store interval and state per element ---
             import('./stateManager.js').then(({ setColorTransitionInterval, clearColorTransitionInterval }) => {
                 clearColorTransitionInterval(selectedElement);
-                let isStartColor = true;
+                // Store isStartColor as a property on the element
+                selectedElement._isStartColor = true;
                 const intervalId = setInterval(() => {
-                    selectedElement.style.backgroundColor = isStartColor ? endColor : startColor;
-                    isStartColor = !isStartColor;
+                    if (!selectedElement) return;
+                    const isStart = selectedElement._isStartColor;
+                    selectedElement.style.backgroundColor = isStart ? endColor : startColor;
+                    selectedElement._isStartColor = !isStart;
                 }, transitionTime * 1000);
                 setColorTransitionInterval(selectedElement, intervalId);
             });
@@ -902,6 +905,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set all element backgrounds (cycle through theme colors)
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
+            // --- Set background color ---
             if (forceOverride) {
                 el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
             } else {
@@ -910,6 +914,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     el.style.backgroundColor = theme.colors[(i + 1) % theme.colors.length];
                 }
             }
+            // --- Set text color for .editable and text children ---
+            const textEls = el.querySelectorAll('.editable, h1, h2, h3, h4, h5, h6, p, span');
+            textEls.forEach((txt, j) => {
+                txt.style.color = theme.colors[(j + 2) % theme.colors.length];
+            });
+            // --- Set SVG fill/stroke ---
+            const svg = el.querySelector('svg');
+            if (svg) {
+                const shapes = svg.querySelectorAll('rect, circle, line, polygon');
+                shapes.forEach((shape, k) => {
+                    if (shape.tagName === 'line') {
+                        shape.setAttribute('stroke', theme.colors[(k + 2) % theme.colors.length]);
+                    } else {
+                        shape.setAttribute('fill', theme.colors[(k + 2) % theme.colors.length]);
+                    }
+                });
+            }
+            // --- Set button background/text color ---
+            const btns = el.querySelectorAll('button');
+            btns.forEach((btn, m) => {
+                btn.style.backgroundColor = theme.colors[(m + 3) % theme.colors.length];
+                btn.style.color = theme.colors[(m + 4) % theme.colors.length];
+            });
+            // --- Set border color ---
+            el.style.borderColor = theme.colors[(i + 2) % theme.colors.length];
         });
         // Save theme in state for undo/redo
         saveState();
