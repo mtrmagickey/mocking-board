@@ -813,18 +813,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearInterval(colorTransitionIntervals.get(uid));
                         colorTransitionIntervals.delete(uid);
                     }
-                    let forward = true;
-                    const intervalId = setInterval(() => {
-                        if (!document.body.contains(el)) {
-                            clearInterval(intervalId);
-                            colorTransitionIntervals.delete(uid);
-                            return;
-                        }
-                        el.style.backgroundColor = forward ? endColor : startColor;
-                        forward = !forward;
-                    }, (parseFloat(transitionTime) || 2) * 1000);
+                    // Use the utility for per-element isolation
+                    const intervalId = startColorTransitionAnimation({
+                        element: el,
+                        startColor,
+                        endColor,
+                        transitionTime,
+                        onCleanup: () => colorTransitionIntervals.delete(uid)
+                    });
                     colorTransitionIntervals.set(uid, intervalId);
-                } catch {}
+                } catch (err) { console.warn('Color transition restore error:', err); }
             }
             // Restore gradient animation
             if (el.dataset.colorGradient) {
@@ -834,77 +832,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearInterval(gradientAnimIntervals.get(uid));
                         gradientAnimIntervals.delete(uid);
                     }
-                    let gradient;
-                    if (gradientType === 'radial') {
-                        gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
-                    } else if (gradientType === 'conic') {
-                        let angle = 'from 0deg';
-                        if (direction && direction.match(/\d+deg/)) {
-                            angle = `from ${direction}`;
-                        }
-                        gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
-                    } else {
-                        gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
-                    }
-                    el.style.background = gradient;
-                    if (animStyle === 'rotate' || animStyle === 'color-shift') {
-                        let intervalId;
-                        // Dynamic state
-                        let speed = parseInt(el.dataset.gradientSpeed) || 50;
-                        let paused = el.dataset.gradientPause === 'true';
-                        let reverse = el.dataset.gradientReverse === 'true';
-                        let loop = el.dataset.gradientLoop !== 'false';
-                        // Blend mode, opacity, etc.
-                        if (el.dataset.gradientBlendMode) el.style.mixBlendMode = el.dataset.gradientBlendMode;
-                        if (el.dataset.gradientOpacity) el.style.opacity = el.dataset.gradientOpacity;
-                        if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
-                            let angleVal = 0;
-                            intervalId = setInterval(() => {
-                                if (el.dataset.gradientPause === 'true') return;
-                                angleVal = (angleVal + (reverse ? -2 : 2) + 360) % 360;
-                                if (!document.body.contains(el)) {
-                                    clearInterval(intervalId);
-                                    gradientAnimIntervals.delete(uid);
-                                    return;
-                                }
-                                if (gradientType === 'conic') {
-                                    el.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
-                                } else {
-                                    el.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
-                                }
-                                // If not looping, stop at 360
-                                if (!loop && (angleVal === 0 || angleVal === 360)) {
-                                    clearInterval(intervalId);
-                                    gradientAnimIntervals.delete(uid);
-                                }
-                            }, speed);
-                        } else if (animStyle === 'color-shift') {
-                            let isStart = true;
-                            intervalId = setInterval(() => {
-                                if (el.dataset.gradientPause === 'true') return;
-                                if (!document.body.contains(el)) {
-                                    clearInterval(intervalId);
-                                    gradientAnimIntervals.delete(uid);
-                                    return;
-                                }
-                                if (gradientType === 'radial') {
-                                    el.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                                } else if (gradientType === 'conic') {
-                                    el.style.background = `conic-gradient(from 0deg, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                                } else {
-                                    el.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                                }
-                                isStart = reverse ? !isStart : isStart = !isStart;
-                                // If not looping, stop after one cycle
-                                if (!loop && !isStart) {
-                                    clearInterval(intervalId);
-                                    gradientAnimIntervals.delete(uid);
-                                }
-                            }, speed * 20);
-                        }
-                        if (intervalId) gradientAnimIntervals.set(uid, intervalId);
-                    }
-                } catch {}
+                    // Use the utility for per-element isolation
+                    const intervalId = startGradientAnimation({
+                        element: el,
+                        startColor,
+                        endColor,
+                        direction,
+                        gradientType,
+                        animStyle
+                    });
+                    gradientAnimIntervals.set(uid, intervalId);
+                } catch (err) { console.warn('Gradient animation restore error:', err); }
             }
             // Restore element animation (scale/move/rotate)
             if (el.dataset.elementAnimation) {
