@@ -1,6 +1,6 @@
 import { createElement as createElementFromManager } from './elementManager.js';
 import { saveState, undo, redo } from './stateManager.js';
-import { hexToRgba, rgbToHex, getRandomColor, startColorTransitionAnimation, startGradientAnimation, clearIntervalsForUID } from './colorAnimationUtils.js';
+import { hexToRgba, rgbToHex, getRandomColor, startColorTransitionAnimation, startGradientAnimation, clearIntervalsForUID, restoreElementAnimation, getElementAnimationState, setElementAnimationState, validateAnimationState } from './colorAnimationUtils.js';
 import { openPopup, closePopup, setupPopupEvents } from './popupManager.js';
 import { startDragging, startResizing } from './dragResizeManager.js';
 import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
@@ -160,30 +160,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedElement = element;
                 openColorGradientPopup();
             }
-            saveState();
+            if (typeof saveState === 'function' && canvas) {
+                saveState(canvas);
+            }
         }
     });
 
     // Canvas event delegation for dragging, resizing, and context menu
-    canvas.addEventListener('pointerdown', (e) => {
-        const element = e.target.closest('.element');
-        if (!element || isLocked) return;
-        if (e.target.classList.contains('resize-handle')) {
-            startResizing(e, () => isLocked, setSelected);
-        } else {
-            startDragging(e, () => isLocked, setDragged, setOffset);
-        }
-    });
+    if (canvas) {
+        canvas.addEventListener('pointerdown', (e) => {
+            const element = e.target.closest('.element');
+            if (!element || isLocked) return;
+            if (e.target.classList.contains('resize-handle')) {
+                startResizing(e, () => isLocked, setSelected);
+            } else {
+                startDragging(e, () => isLocked, setDragged, setOffset);
+            }
+        });
 
-    canvas.addEventListener('contextmenu', (e) => {
-        const element = e.target.closest('.element');
-        if (!element || isLocked) return;
-        e.preventDefault();
-        selectedElement = element;
-        contextMenu.style.display = 'block';
-        contextMenu.style.left = `${e.clientX}px`;
-        contextMenu.style.top = `${e.clientY}px`;
-    });
+        canvas.addEventListener('contextmenu', (e) => {
+            const element = e.target.closest('.element');
+            if (!element || isLocked) return;
+            e.preventDefault();
+            selectedElement = element;
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = `${e.clientX}px`;
+            contextMenu.style.top = `${e.clientY}px`;
+        });
+    } else {
+        console.error('main.js: Canvas element is undefined!');
+    }
 
     // Context menu event delegation
     contextMenu.addEventListener('click', (e) => {
@@ -805,46 +811,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const elements = canvas.querySelectorAll('.element');
         elements.forEach(el => {
             const uid = getElementUID(el);
-            // Restore color transition
-            if (el.dataset.colorTransition) {
-                try {
-                    const { startColor, endColor, transitionTime } = JSON.parse(el.dataset.colorTransition);
-                    if (colorTransitionIntervals.has(uid)) {
-                        clearInterval(colorTransitionIntervals.get(uid));
-                        colorTransitionIntervals.delete(uid);
-                    }
-                    // Use the utility for per-element isolation
-                    const intervalId = startColorTransitionAnimation({
-                        element: el,
-                        startColor,
-                        endColor,
-                        transitionTime,
-                        onCleanup: () => colorTransitionIntervals.delete(uid)
-                    });
-                    colorTransitionIntervals.set(uid, intervalId);
-                } catch (err) { console.warn('Color transition restore error:', err); }
+            // Try to get modular animation state from dataset or state object
+            let animationState = getElementAnimationState(uid);
+            // If not present, try to build from dataset attributes (legacy)
+            if (!animationState) {
+                animationState = {};
+                if (el.dataset.colorTransition) {
+                    try {
+                        const ct = JSON.parse(el.dataset.colorTransition);
+                        animationState.colorAnimActive = true;
+                        animationState.colorAnimStartColor = ct.startColor;
+                        animationState.colorAnimEndColor = ct.endColor;
+                        animationState.colorAnimTransitionTime = ct.transitionTime;
+                    } catch {}
+                }
+                if (el.dataset.colorGradient) {
+                    try {
+                        const cg = JSON.parse(el.dataset.colorGradient);
+                        animationState.gradientAnimActive = true;
+                        animationState.gradientStartColor = cg.startColor;
+                        animationState.gradientEndColor = cg.endColor;
+                        animationState.gradientDirection = cg.direction;
+                        animationState.gradientType = cg.gradientType;
+                        animationState.gradientAnimStyle = cg.animStyle;
+                    } catch {}
+                }
+                // Add more legacy dataset extraction as needed
+                setElementAnimationState(uid, animationState);
             }
-            // Restore gradient animation
-            if (el.dataset.colorGradient) {
-                try {
-                    const { startColor, endColor, direction, gradientType, animStyle } = JSON.parse(el.dataset.colorGradient);
-                    if (gradientAnimIntervals.has(uid)) {
-                        clearInterval(gradientAnimIntervals.get(uid));
-                        gradientAnimIntervals.delete(uid);
-                    }
-                    // Use the utility for per-element isolation
-                    const intervalId = startGradientAnimation({
-                        element: el,
-                        startColor,
-                        endColor,
-                        direction,
-                        gradientType,
-                        animStyle
-                    });
-                    gradientAnimIntervals.set(uid, intervalId);
-                } catch (err) { console.warn('Gradient animation restore error:', err); }
-            }
-            // Restore element animation (scale/move/rotate)
+            // Validate and restore
+            animationState = validateAnimationState(animationState);
+            restoreElementAnimation(el, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
+            // Restore element animation (scale/move/rotate) as before
             if (el.dataset.elementAnimation) {
                 try {
                     const { type, preset, duration } = JSON.parse(el.dataset.elementAnimation);
