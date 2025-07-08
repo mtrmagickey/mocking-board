@@ -99,6 +99,10 @@ function restoreElementStatesByUID(canvas, states, colorTransitionIntervals, gra
 
 // Override saveState to include all per-element state by UID
 export function saveState(canvas) {
+    if (!canvas) {
+        console.error('saveState: Canvas element is undefined!');
+        return;
+    }
     const elementStates = getElementStatesByUID(canvas);
     const state = JSON.stringify({
         html: canvas.innerHTML,
@@ -110,6 +114,10 @@ export function saveState(canvas) {
 
 // Override undo/redo to restore all per-element state by UID
 export function undo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals) {
+    if (!canvas) {
+        console.error('undo: Canvas element is undefined!');
+        return;
+    }
     if (undoStack.length > 0) {
         redoStack.push(JSON.stringify({
             html: canvas.innerHTML,
@@ -125,6 +133,10 @@ export function undo(canvas, reattachEventListeners, colorTransitionIntervals, g
 }
 
 export function redo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals) {
+    if (!canvas) {
+        console.error('redo: Canvas element is undefined!');
+        return;
+    }
     if (redoStack.length > 0) {
         undoStack.push(JSON.stringify({
             html: canvas.innerHTML,
