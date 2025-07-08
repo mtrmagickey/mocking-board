@@ -10,6 +10,7 @@ let redoStack = [];
 
 // Helper to get all per-element state (color transitions, gradients, etc.) by UID
 function getElementStatesByUID(canvas) {
+    if (!canvas) return [];
     const states = [];
     canvas.querySelectorAll('.element').forEach(el => {
         const uid = el.getAttribute('data-uid');
@@ -126,9 +127,32 @@ export function redo(canvas, reattachEventListeners, colorTransitionIntervals, g
     }
 }
 
-export function clearState() {
+export function clearState(canvas, colorTransitionIntervals, gradientAnimIntervals) {
     undoStack = [];
     redoStack = [];
+    // Clear all per-element state attributes and intervals
+    if (canvas) {
+        canvas.querySelectorAll('.element').forEach(el => {
+            // Remove all dataset state attributes
+            Object.keys(el.dataset).forEach(key => {
+                delete el.dataset[key];
+            });
+            // Remove background and style
+            el.style.background = '';
+            el.style.backgroundColor = '';
+            el.style.opacity = '';
+            el.style.mixBlendMode = '';
+        });
+    }
+    // Clear all intervals
+    if (colorTransitionIntervals) {
+        colorTransitionIntervals.forEach((intervalId) => clearInterval(intervalId));
+        colorTransitionIntervals.clear();
+    }
+    if (gradientAnimIntervals) {
+        gradientAnimIntervals.forEach((intervalId) => clearInterval(intervalId));
+        gradientAnimIntervals.clear();
+    }
 }
 
 export function getStateStacks() {

@@ -1355,6 +1355,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             if (confirm('Clear the canvas? This cannot be undone.')) {
+                // Also clear all per-element state and intervals
+                if (typeof clearState === 'function') {
+                    clearState(canvas, colorTransitionIntervals, gradientAnimIntervals);
+                }
                 canvas.innerHTML = '';
                 if (typeof saveState === 'function' && canvas) saveState();
             }
@@ -1441,8 +1445,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- Animate if needed ---
             if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
                 angleVal = 0;
+                let speed = parseInt(selectedElement.dataset.gradientSpeed) || 50;
+                let reverse = selectedElement.dataset.gradientReverse === 'true';
+                let loop = selectedElement.dataset.gradientLoop !== 'false';
                 selectedElement._gradientAnimInterval = setInterval(() => {
-                    angleVal = (angleVal + 2) % 360;
+                    if (selectedElement.dataset.gradientPause === 'true') return;
+                    angleVal = (angleVal + (reverse ? -2 : 2) + 360) % 360;
                     if (!document.body.contains(selectedElement)) {
                         clearInterval(selectedElement._gradientAnimInterval);
                         selectedElement._gradientAnimInterval = null;
@@ -1453,10 +1461,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         selectedElement.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
                     }
-                }, 50);
+                    if (!loop && (angleVal === 0 || angleVal === 360)) {
+                        clearInterval(selectedElement._gradientAnimInterval);
+                        selectedElement._gradientAnimInterval = null;
+                    }
+                }, speed);
             } else if (animStyle === 'color-shift') {
                 let isStart = true;
+                let speed = parseInt(selectedElement.dataset.gradientSpeed) || 50;
+                let reverse = selectedElement.dataset.gradientReverse === 'true';
+                let loop = selectedElement.dataset.gradientLoop !== 'false';
                 selectedElement._gradientAnimInterval = setInterval(() => {
+                    if (selectedElement.dataset.gradientPause === 'true') return;
                     if (!document.body.contains(selectedElement)) {
                         clearInterval(selectedElement._gradientAnimInterval);
                         selectedElement._gradientAnimInterval = null;
@@ -1469,8 +1485,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         selectedElement.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
                     }
-                    isStart = !isStart;
-                }, 1000);
+                    isStart = reverse ? !isStart : isStart = !isStart;
+                    if (!loop && !isStart) {
+                        clearInterval(selectedElement._gradientAnimInterval);
+                        selectedElement._gradientAnimInterval = null;
+                    }
+                }, speed * 20);
             }
             // Store gradient info for export/undo/redo
             selectedElement.dataset.colorGradient = JSON.stringify({
