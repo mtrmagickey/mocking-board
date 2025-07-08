@@ -301,7 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
         element.style.top = '10px';
         element.style.width = '200px';
         element.style.height = '100px';
-        element.style.backgroundColor = getRandomColor(); // Random background color from custom colors
+        // --- Transparent background for shapes/lines ---
+        if (["rectangle","circle","line","arrow","triangle"].includes(type)) {
+            element.style.backgroundColor = 'rgba(43, 38, 34, 0)';
+        } else {
+            element.style.backgroundColor = getRandomColor(); // Random background color from custom colors
+        }
 
         // --- Assign data-type and unique data-id at creation ---
         element.setAttribute('data-type', type);
@@ -364,17 +369,120 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
         }
 
+        // --- Add rotate handle ---
+        const rotateHandle = document.createElement('div');
+        rotateHandle.className = 'rotate-handle';
+        rotateHandle.title = 'Rotate';
+        rotateHandle.style.position = 'absolute';
+        rotateHandle.style.top = '-18px';
+        rotateHandle.style.right = '50%';
+        rotateHandle.style.transform = 'translateX(50%)';
+        rotateHandle.style.width = '20px';
+        rotateHandle.style.height = '20px';
+        rotateHandle.style.background = '#fff';
+        rotateHandle.style.border = '2px solid #888';
+        rotateHandle.style.borderRadius = '50%';
+        rotateHandle.style.cursor = 'grab';
+        rotateHandle.style.zIndex = '10';
+        rotateHandle.style.boxShadow = '0 1px 4px #0002';
+        rotateHandle.style.display = isLocked ? 'none' : 'block';
+        rotateHandle.innerHTML = '<svg width="20" height="20"><circle cx="10" cy="10" r="8" stroke="#888" stroke-width="2" fill="none"/><path d="M10 2 A8 8 0 0 1 18 10" stroke="#888" stroke-width="2" fill="none"/></svg>';
+        element.appendChild(rotateHandle);
+
         const resizeHandle = document.createElement('div');
         resizeHandle.className = 'resize-handle';
         element.appendChild(resizeHandle);
 
+        // --- Rotate logic ---
+        let rotating = false;
+        let startAngle = 0;
+        let startRotation = 0;
+        rotateHandle.addEventListener('pointerdown', function(e) {
+            e.stopPropagation();
+            rotating = true;
+            const rect = element.getBoundingClientRect();
+            const center = {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+            };
+            startAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+            startRotation = parseFloat(element.dataset.rotation) || 0;
+            document.body.style.cursor = 'grabbing';
+            function onMove(ev) {
+                if (!rotating) return;
+                const angle = Math.atan2(ev.clientY - center.y, ev.clientX - center.x);
+                let deg = (startRotation + (angle - startAngle) * 180 / Math.PI) % 360;
+                if (deg < 0) deg += 360;
+                element.style.transform = `rotate(${deg}deg)`;
+                element.dataset.rotation = deg;
+            }
+            function onUp() {
+                rotating = false;
+                document.body.style.cursor = '';
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+                if (typeof saveState === 'function' && canvas) saveState();
+            }
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        });
+
         element.addEventListener('pointerdown', startDragging);
         element.addEventListener('contextmenu', showContextMenu);
         resizeHandle.addEventListener('pointerdown', startResizing);
+        rotateHandle.addEventListener('pointerdown', startRotating);
         canvas.appendChild(element);
 
-        // Update resize handles visibility based on initial lock state
+        // Update resize/rotate handles visibility based on initial lock state
         updateResizeHandles();
+        updateRotateHandles();
+    }
+
+    // --- Interactive rotation logic ---
+    let rotatingElement = null;
+    let initialAngle = 0;
+    let startAngle = 0;
+    function startRotating(e) {
+        if (isLocked) return;
+        e.stopPropagation();
+        rotatingElement = e.target.closest('.element');
+        const rect = rotatingElement.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const pointerAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+        startAngle = pointerAngle;
+        initialAngle = parseFloat(rotatingElement.dataset.rotation || 0);
+        document.body.style.cursor = 'grabbing';
+        document.addEventListener('pointermove', rotateMove);
+        document.addEventListener('pointerup', stopRotating);
+    }
+    function rotateMove(e) {
+        if (!rotatingElement) return;
+        const rect = rotatingElement.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const pointerAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+        let newAngle = initialAngle + (pointerAngle - startAngle);
+        newAngle = ((newAngle % 360) + 360) % 360;
+        rotatingElement.style.transform = `rotate(${newAngle}deg)`;
+        rotatingElement.dataset.rotation = newAngle;
+    }
+    function stopRotating() {
+        if (rotatingElement) {
+            if (typeof saveState === 'function' && canvas) saveState();
+        }
+        rotatingElement = null;
+        document.body.style.cursor = '';
+        document.removeEventListener('pointermove', rotateMove);
+        document.removeEventListener('pointerup', stopRotating);
+    }
+
+    // --- Update rotate handle visibility on lock/unlock ---
+    function updateRotateHandles() {
+        const handles = canvas.querySelectorAll('.rotate-handle');
+        handles.forEach(handle => {
+            handle.style.display = isLocked ? 'none' : '';
+        });
     }
 
     function startDragging(e) {
@@ -910,8 +1018,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Replace open/close popup functions with popupManager usage
     function openColorPopup() {
-        colorPicker.value = getRandomColor();
-        hexInput.value = colorPicker.value;
+        // Use theme color if a theme is selected, else random
+        let color = getRandomColor();
+        if (currentThemeIndex !== null && colorThemes[currentThemeIndex]) {
+            // Pick a random color from the current theme, but not the background color (index 0)
+            const themeColors = colorThemes[currentThemeIndex].colors;
+            color = themeColors.length > 1 ? themeColors[Math.floor(Math.random() * (themeColors.length - 1)) + 1] : themeColors[0];
+        }
+        colorPicker.value = color;
+        hexInput.value = color;
         openPopup(colorPopup);
     }
     function closeColorPopup() { closePopup(colorPopup); }
@@ -931,6 +1046,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeAnimationPopup() { closePopup(animationPopup); }
     function openMediaPopup() { openPopup(mediaPopup); }
     function closeMediaPopup() { closePopup(mediaPopup); }
+
+    // Track the current theme index
+    let currentThemeIndex = null;
 
     // Setup drag/resize logic
     // Replace startDragging, startResizing with dragResizeManager usage
@@ -1157,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Apply theme to canvas and all elements
     function applyTheme(idx) {
+        currentThemeIndex = idx;
         const theme = colorThemes[idx];
         if (!theme) return;
         // Set canvas background
@@ -1421,6 +1540,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Hide or show all resize handles
             const handles = canvas.querySelectorAll('.resize-handle');
             handles.forEach(handle => {
+                handle.style.display = isLocked ? 'none' : '';
+            });
+            // Hide or show all rotate handles
+            const rotateHandles = canvas.querySelectorAll('.rotate-handle');
+            rotateHandles.forEach(handle => {
                 handle.style.display = isLocked ? 'none' : '';
             });
             // Optionally visually indicate locked state
