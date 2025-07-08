@@ -1392,6 +1392,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 gradientAnimStyle: animStyle
             };
             setElementAnimationState(uid, animationState);
+            // --- Immediately set static gradient background for visual feedback ---
+            let gradient = '';
+            if (gradientType === 'radial') {
+                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
+            } else if (gradientType === 'conic') {
+                let angle = 'from 0deg';
+                if (direction && direction.match(/\d+deg/)) {
+                    angle = `from ${direction}`;
+                }
+                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
+            } else {
+                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
+            }
+            selectedElement.style.background = gradient;
             // Start and restore animation using modular logic
             restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
             if (typeof saveState === 'function' && canvas) saveState();
