@@ -1349,93 +1349,51 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Apply Color Gradient: Set artistic gradient background on selected element ---
+    // --- Apply Color Transition: Modular per-element state and animation ---
+    applyTransitionBtn.addEventListener('click', () => {
+        if (selectedElement) {
+            const startColor = startColorInput.value;
+            const endColor = endColorInput.value;
+            const transitionTime = parseFloat(transitionTimeInput.value) || 2;
+            const uid = getElementUID(selectedElement);
+            if (!uid) return;
+            // Build modular animation state
+            const animationState = {
+                colorAnimActive: true,
+                colorAnimStartColor: startColor,
+                colorAnimEndColor: endColor,
+                colorAnimTransitionTime: transitionTime
+            };
+            setElementAnimationState(uid, animationState);
+            // Start and restore animation using modular logic
+            restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
+            if (typeof saveState === 'function' && canvas) saveState();
+        }
+        closeColorTransitionPopup();
+    });
+
+    // --- Apply Color Gradient: Modular per-element state and animation ---
     applyGradientBtn.addEventListener('click', () => {
         if (selectedElement) {
             const startColor = startGradientColorInput.value;
             const endColor = endGradientColorInput.value;
             const direction = gradientDirectionSelect.value || 'to right';
-            const gradientTypeSelect = document.getElementById('gradient-type');
             const gradientType = gradientTypeSelect ? gradientTypeSelect.value : 'linear';
-            const gradientAnimSelect = document.getElementById('gradient-anim-style');
             const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
-            let gradient;
-            let angleVal = 0;
-            // --- Clean up previous interval if any ---
-            if (selectedElement._gradientAnimInterval) {
-                clearInterval(selectedElement._gradientAnimInterval);
-                selectedElement._gradientAnimInterval = null;
-            }
-            if (gradientType === 'radial') {
-                gradient = `radial-gradient(circle, ${startColor}, ${endColor})`;
-            } else if (gradientType === 'conic') {
-                let angle = 'from 0deg';
-                if (direction && direction.match(/\d+deg/)) {
-                    angle = `from ${direction}`;
-                }
-                gradient = `conic-gradient(${angle}, ${startColor}, ${endColor})`;
-            } else {
-                gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
-            }
-            selectedElement.style.background = gradient;
-            // --- Animate if needed ---
-            if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
-                angleVal = 0;
-                let speed = parseInt(selectedElement.dataset.gradientSpeed) || 50;
-                let reverse = selectedElement.dataset.gradientReverse === 'true';
-                let loop = selectedElement.dataset.gradientLoop !== 'false';
-                selectedElement._gradientAnimInterval = setInterval(() => {
-                    if (selectedElement.dataset.gradientPause === 'true') return;
-                    angleVal = (angleVal + (reverse ? -2 : 2) + 360) % 360;
-                    if (!document.body.contains(selectedElement)) {
-                        clearInterval(selectedElement._gradientAnimInterval);
-                        selectedElement._gradientAnimInterval = null;
-                        return;
-                    }
-                    if (gradientType === 'conic') {
-                        selectedElement.style.background = `conic-gradient(from ${angleVal}deg, ${startColor}, ${endColor})`;
-                    } else {
-                        selectedElement.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
-                    }
-                    if (!loop && (angleVal === 0 || angleVal === 360)) {
-                        clearInterval(selectedElement._gradientAnimInterval);
-                        selectedElement._gradientAnimInterval = null;
-                    }
-                }, speed);
-            } else if (animStyle === 'color-shift') {
-                let isStart = true;
-                let speed = parseInt(selectedElement.dataset.gradientSpeed) || 50;
-                let reverse = selectedElement.dataset.gradientReverse === 'true';
-                let loop = selectedElement.dataset.gradientLoop !== 'false';
-                selectedElement._gradientAnimInterval = setInterval(() => {
-                    if (selectedElement.dataset.gradientPause === 'true') return;
-                    if (!document.body.contains(selectedElement)) {
-                        clearInterval(selectedElement._gradientAnimInterval);
-                        selectedElement._gradientAnimInterval = null;
-                        return;
-                    }
-                    if (gradientType === 'radial') {
-                        selectedElement.style.background = `radial-gradient(circle, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                    } else if (gradientType === 'conic') {
-                        selectedElement.style.background = `conic-gradient(from 0deg, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                    } else {
-                        selectedElement.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
-                    }
-                    isStart = reverse ? !isStart : isStart = !isStart;
-                    if (!loop && !isStart) {
-                        clearInterval(selectedElement._gradientAnimInterval);
-                        selectedElement._gradientAnimInterval = null;
-                    }
-                }, speed * 20);
-            }
-            // Store gradient info for export/undo/redo
-            selectedElement.dataset.colorGradient = JSON.stringify({
-                startColor,
-                endColor,
-                direction,
-                gradientType,
-                animStyle
-            });
+            const uid = getElementUID(selectedElement);
+            if (!uid) return;
+            // Build modular animation state
+            const animationState = {
+                gradientAnimActive: true,
+                gradientStartColor: startColor,
+                gradientEndColor: endColor,
+                gradientDirection: direction,
+                gradientType: gradientType,
+                gradientAnimStyle: animStyle
+            };
+            setElementAnimationState(uid, animationState);
+            // Start and restore animation using modular logic
+            restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
             if (typeof saveState === 'function' && canvas) saveState();
         }
         closeColorGradientPopup();
