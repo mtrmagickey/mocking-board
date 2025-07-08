@@ -59,6 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const fonts = ['Roboto', 'Pacifico', 'Old Standard TT'];
     let fontIndex = 0;
 
+    // --- Per-UID animation/gradient interval tracking ---
+    window.gradientAnimIntervals = window.gradientAnimIntervals || new Map();
+    window.colorTransitionIntervals = window.colorTransitionIntervals || new Map();
+
     const undoStack = [];
     const redoStack = [];
 
@@ -506,14 +510,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const endColor = endColorInput.value;
             const transitionTime = transitionTimeInput.value;
 
+            // Store state in dataset for stateManager.js
+            selectedElement.dataset.colorTransition = JSON.stringify({
+                startColor,
+                endColor,
+                transitionTime
+            });
+
+            // UID-based interval management
+            const uid = selectedElement.getAttribute('data-uid');
+            if (window.colorTransitionIntervals.has(uid)) {
+                clearInterval(window.colorTransitionIntervals.get(uid));
+                window.colorTransitionIntervals.delete(uid);
+            }
+
             selectedElement.style.transition = `background-color ${transitionTime}s ease-in-out`;
             selectedElement.style.backgroundColor = startColor;
 
             let isStartColor = true;
-            setInterval(() => {
+            const intervalId = setInterval(() => {
                 selectedElement.style.backgroundColor = isStartColor ? endColor : startColor;
                 isStartColor = !isStartColor;
             }, transitionTime * 1000);
+            window.colorTransitionIntervals.set(uid, intervalId);
         }
         closeColorTransitionPopup();
     });
@@ -523,8 +542,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const startGradientColor = startGradientColorInput.value;
             const endGradientColor = endGradientColorInput.value;
             const gradientDirection = gradientDirectionSelect.value;
+            const gradientType = 'linear'; // Extend UI for more types if needed
+            const animStyle = 'none'; // Extend UI for animation style if needed
 
+            // Store state in dataset for stateManager.js
+            selectedElement.dataset.colorGradient = JSON.stringify({
+                startColor: startGradientColor,
+                endColor: endGradientColor,
+                direction: gradientDirection,
+                gradientType,
+                animStyle
+            });
+            selectedElement.dataset.gradientType = gradientType;
+            selectedElement.dataset.gradientDirection = gradientDirection;
+            selectedElement.dataset.gradientStartColor = startGradientColor;
+            selectedElement.dataset.gradientEndColor = endGradientColor;
+            selectedElement.dataset.gradientAnimStyle = animStyle;
+            selectedElement.dataset.gradientActive = 'true';
+
+            // UID-based interval management
+            const uid = selectedElement.getAttribute('data-uid');
+            if (window.gradientAnimIntervals.has(uid)) {
+                clearInterval(window.gradientAnimIntervals.get(uid));
+                window.gradientAnimIntervals.delete(uid);
+            }
+            // For now, just set the background (no animation)
             selectedElement.style.background = `linear-gradient(${gradientDirection}, ${startGradientColor}, ${endGradientColor})`;
+            // If you want to support animation, import and use startGradientAnimation here
         }
         closeColorGradientPopup();
     });

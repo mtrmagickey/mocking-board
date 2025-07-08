@@ -849,10 +849,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     el.style.background = gradient;
                     if (animStyle === 'rotate' || animStyle === 'color-shift') {
                         let intervalId;
+                        // Dynamic state
+                        let speed = parseInt(el.dataset.gradientSpeed) || 50;
+                        let paused = el.dataset.gradientPause === 'true';
+                        let reverse = el.dataset.gradientReverse === 'true';
+                        let loop = el.dataset.gradientLoop !== 'false';
+                        // Blend mode, opacity, etc.
+                        if (el.dataset.gradientBlendMode) el.style.mixBlendMode = el.dataset.gradientBlendMode;
+                        if (el.dataset.gradientOpacity) el.style.opacity = el.dataset.gradientOpacity;
                         if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
                             let angleVal = 0;
                             intervalId = setInterval(() => {
-                                angleVal = (angleVal + 2) % 360;
+                                if (el.dataset.gradientPause === 'true') return;
+                                angleVal = (angleVal + (reverse ? -2 : 2) + 360) % 360;
                                 if (!document.body.contains(el)) {
                                     clearInterval(intervalId);
                                     gradientAnimIntervals.delete(uid);
@@ -863,10 +872,16 @@ document.addEventListener('DOMContentLoaded', () => {
                                 } else {
                                     el.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
                                 }
-                            }, 50);
+                                // If not looping, stop at 360
+                                if (!loop && (angleVal === 0 || angleVal === 360)) {
+                                    clearInterval(intervalId);
+                                    gradientAnimIntervals.delete(uid);
+                                }
+                            }, speed);
                         } else if (animStyle === 'color-shift') {
                             let isStart = true;
                             intervalId = setInterval(() => {
+                                if (el.dataset.gradientPause === 'true') return;
                                 if (!document.body.contains(el)) {
                                     clearInterval(intervalId);
                                     gradientAnimIntervals.delete(uid);
@@ -879,8 +894,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 } else {
                                     el.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
                                 }
-                                isStart = !isStart;
-                            }, 1000);
+                                isStart = reverse ? !isStart : isStart = !isStart;
+                                // If not looping, stop after one cycle
+                                if (!loop && !isStart) {
+                                    clearInterval(intervalId);
+                                    gradientAnimIntervals.delete(uid);
+                                }
+                            }, speed * 20);
                         }
                         if (intervalId) gradientAnimIntervals.set(uid, intervalId);
                     }
@@ -1265,6 +1285,71 @@ document.addEventListener('DOMContentLoaded', () => {
         loadBtn.addEventListener('click', () => {
             fileInput.click();
             if (typeof saveState === 'function' && canvas) saveState();
+        });
+        // Restore all dataset attributes on import
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported && imported.elements) {
+                        canvas.innerHTML = '';
+                        imported.elements.forEach(elData => {
+                            const element = document.createElement('div');
+                            element.className = 'element svg-container';
+                            // Restore styles
+                            element.style.left = elData.left;
+                            element.style.top = elData.top;
+                            element.style.width = elData.width;
+                            element.style.height = elData.height;
+                            element.style.backgroundColor = elData.backgroundColor;
+                            element.style.color = elData.color;
+                            element.style.fontSize = elData.fontSize;
+                            element.style.fontFamily = elData.fontFamily;
+                            element.style.zIndex = elData.zIndex;
+                            element.style.border = elData.border;
+                            element.style.borderColor = elData.borderColor;
+                            element.innerHTML = elData.innerHTML;
+                            // Restore all dataset attributes
+                            if (elData.dataset) {
+                                Object.keys(elData.dataset).forEach(key => {
+                                    element.dataset[key] = elData.dataset[key];
+                                });
+                            }
+                            // Restore rotation
+                            if (elData.rotation) {
+                                element.style.transform = `rotate(${elData.rotation}deg)`;
+                            }
+                            // Add resize handle
+                            const resizeHandle = document.createElement('div');
+                            resizeHandle.className = 'resize-handle';
+                            element.appendChild(resizeHandle);
+                            // Reattach listeners
+                            element.addEventListener('pointerdown', startDragging);
+                            element.addEventListener('contextmenu', showContextMenu);
+                            resizeHandle.addEventListener('pointerdown', startResizing);
+                            // Media/iframe listeners
+                            const iframeElement = element.querySelector('iframe');
+                            if (iframeElement) {
+                                iframeElement.addEventListener('pointerdown', (e) => e.stopPropagation());
+                            }
+                            const mediaElements = element.querySelectorAll('video, audio');
+                            mediaElements.forEach(media => {
+                                media.addEventListener('pointerdown', (e) => e.stopPropagation());
+                            });
+                            canvas.appendChild(element);
+                        });
+                        // Restore all per-UID animations/intervals
+                        if (typeof restoreElementAnimations === 'function') restoreElementAnimations();
+                        alert('Layout loaded!');
+                        saveState();
+                    } else {
+                        alert('Invalid layout file.');
+                    }
+                };
+                reader.readAsText(file);
+            }
         });
     }
     if (clearBtn) {

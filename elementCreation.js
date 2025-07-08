@@ -1,6 +1,63 @@
+let __uid_counter = 0;
+function generateUID() {
+    return 'el-' + (__uid_counter++).toString(36) + '-' + Date.now().toString(36);
+}
+
 function createElement(type, color) {
     const element = document.createElement('div');
-    element.className = 'svg-container';
+    element.className = 'element svg-container';
+    element.setAttribute('data-uid', generateUID());
+
+    // Add excessive state attributes for future extensibility
+    element.dataset.colorGradient = '';
+    element.dataset.colorTransition = '';
+    element.dataset.gradientType = '';
+    element.dataset.gradientDirection = '';
+    element.dataset.gradientAnimStyle = '';
+    element.dataset.gradientStartColor = '';
+    element.dataset.gradientEndColor = '';
+    element.dataset.gradientAngle = '';
+    element.dataset.gradientPreset = '';
+    element.dataset.gradientActive = 'false';
+    element.dataset.colorAnimActive = 'false';
+    element.dataset.colorAnimType = '';
+    element.dataset.colorAnimInterval = '';
+    // Extended state attributes for more granular tracking
+    element.dataset.gradientSpeed = '';
+    element.dataset.gradientPause = 'false';
+    element.dataset.gradientReverse = 'false';
+    element.dataset.gradientLoop = 'false';
+    element.dataset.gradientStep = '';
+    element.dataset.gradientFrame = '';
+    element.dataset.gradientLastUpdate = '';
+    element.dataset.gradientCustomStops = '';
+    element.dataset.gradientOpacity = '';
+    element.dataset.gradientBlendMode = '';
+    element.dataset.gradientMask = '';
+    element.dataset.gradientClipPath = '';
+    element.dataset.gradientZIndex = '';
+    element.dataset.gradientFilter = '';
+    element.dataset.gradientID = '';
+    element.dataset.gradientUserPreset = '';
+    element.dataset.gradientMeta = '';
+    element.dataset.colorAnimSpeed = '';
+    element.dataset.colorAnimPause = 'false';
+    element.dataset.colorAnimReverse = 'false';
+    element.dataset.colorAnimLoop = 'false';
+    element.dataset.colorAnimStep = '';
+    element.dataset.colorAnimFrame = '';
+    element.dataset.colorAnimLastUpdate = '';
+    element.dataset.colorAnimCustomStops = '';
+    element.dataset.colorAnimOpacity = '';
+    element.dataset.colorAnimBlendMode = '';
+    element.dataset.colorAnimMask = '';
+    element.dataset.colorAnimClipPath = '';
+    element.dataset.colorAnimZIndex = '';
+    element.dataset.colorAnimFilter = '';
+    element.dataset.colorAnimID = '';
+    element.dataset.colorAnimUserPreset = '';
+    element.dataset.colorAnimMeta = '';
+    // Add more as needed for future features
 
     switch(type) {
         case 'rectangle':
