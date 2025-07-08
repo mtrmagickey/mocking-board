@@ -294,7 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createElement(type) {
         saveState();
-
         const element = document.createElement('div');
         element.className = 'element';
         element.style.left = '10px';
@@ -303,9 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
         element.style.height = '100px';
         // --- Transparent background for shapes/lines ---
         if (["rectangle","circle","line","arrow","triangle"].includes(type)) {
-            element.style.backgroundColor = 'rgba(43, 38, 34, 0)';
+            element.style.background = 'none';
+            element.style.backgroundColor = 'rgba(0,0,0,0)';
         } else {
-            element.style.backgroundColor = getRandomColor(); // Random background color from custom colors
+            element.style.backgroundColor = getRandomColor();
         }
 
         // --- Assign data-type and unique data-id at creation ---
@@ -464,8 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const pointerAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
         let newAngle = initialAngle + (pointerAngle - startAngle);
         newAngle = ((newAngle % 360) + 360) % 360;
-        rotatingElement.style.transform = `rotate(${newAngle}deg)`;
         rotatingElement.dataset.rotation = newAngle;
+        // Compose with any scale/move
+        setElementTransform(rotatingElement, {
+            rotate: newAngle,
+            scale: rotatingElement.dataset.scale ? parseFloat(rotatingElement.dataset.scale) : undefined,
+            translateX: rotatingElement.dataset.translateX ? parseFloat(rotatingElement.dataset.translateX) : undefined
+        });
     }
     function stopRotating() {
         if (rotatingElement) {
@@ -875,7 +880,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     scale += direction * 0.02;
                     if (scale > 1.2) direction = -1;
                     if (scale < 0.8) direction = 1;
-                    selectedElement.style.transform = `scale(${scale})`;
+                    selectedElement.dataset.scale = scale;
+                    setElementTransform(selectedElement, {
+                        scale,
+                        rotate: selectedElement.dataset.rotation ? parseFloat(selectedElement.dataset.rotation) : undefined,
+                        translateX: selectedElement.dataset.translateX ? parseFloat(selectedElement.dataset.translateX) : undefined
+                    });
                 }, 1000 * duration / 40);
             } else if (type === 'move') {
                 let pos = 0, dir = 1;
@@ -888,7 +898,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     pos += dir * 2;
                     if (pos > 40) dir = -1;
                     if (pos < -40) dir = 1;
-                    selectedElement.style.transform = `translateX(${pos}px)`;
+                    selectedElement.dataset.translateX = pos;
+                    setElementTransform(selectedElement, {
+                        translateX: pos,
+                        scale: selectedElement.dataset.scale ? parseFloat(selectedElement.dataset.scale) : undefined,
+                        rotate: selectedElement.dataset.rotation ? parseFloat(selectedElement.dataset.rotation) : undefined
+                    });
                 }, 1000 * duration / 40);
             } else if (type === 'rotate') {
                 let angle = 0;
@@ -899,7 +914,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     angle = (angle + 5) % 360;
-                    selectedElement.style.transform = `rotate(${angle}deg)`;
+                    selectedElement.dataset.rotation = angle;
+                    setElementTransform(selectedElement, {
+                        rotate: angle,
+                        scale: selectedElement.dataset.scale ? parseFloat(selectedElement.dataset.scale) : undefined,
+                        translateX: selectedElement.dataset.translateX ? parseFloat(selectedElement.dataset.translateX) : undefined
+                    });
                 }, 1000 * duration / 40);
             }
             if (intervalId) {
@@ -970,7 +990,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             scale += direction * 0.02;
                             if (scale > 1.2) direction = -1;
                             if (scale < 0.8) direction = 1;
-                            el.style.transform = `scale(${scale})`;
+                            el.dataset.scale = scale;
+                            setElementTransform(el, {
+                                scale,
+                                rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined,
+                                translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
+                            });
                         }, 1000 * (parseFloat(duration) || 2) / 40);
                     } else if (type === 'move') {
                         let pos = 0, dir = 1;
@@ -983,7 +1008,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             pos += dir * 2;
                             if (pos > 40) dir = -1;
                             if (pos < -40) dir = 1;
-                            el.style.transform = `translateX(${pos}px)`;
+                            el.dataset.translateX = pos;
+                            setElementTransform(el, {
+                                translateX: pos,
+                                scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
+                                rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined
+                            });
                         }, 1000 * (parseFloat(duration) || 2) / 40);
                     } else if (type === 'rotate') {
                         let angle = 0;
@@ -994,7 +1024,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return;
                             }
                             angle = (angle + 5) % 360;
-                            el.style.transform = `rotate(${angle}deg)`;
+                            el.dataset.rotation = angle;
+                            setElementTransform(el, {
+                                rotate: angle,
+                                scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
+                                translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
+                            });
                         }, 1000 * (parseFloat(duration) || 2) / 40);
                     }
                     if (intervalId) elementAnimIntervals.set(uid, intervalId);
