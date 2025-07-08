@@ -29,17 +29,28 @@ export function getRandomColor() {
 export function startColorTransitionAnimation({ element, startColor, endColor, transitionTime, onCleanup }) {
     if (!element) return null;
     let isStartColor = true;
+    // Support dynamic state
+    let speed = parseFloat(element.dataset.colorAnimSpeed) || transitionTime * 1000;
+    let paused = element.dataset.colorAnimPause === 'true';
+    let reverse = element.dataset.colorAnimReverse === 'true';
+    let loop = element.dataset.colorAnimLoop !== 'false';
     element.style.transition = `background-color ${transitionTime}s ease-in-out`;
     element.style.backgroundColor = startColor;
     const intervalId = setInterval(() => {
+        if (element.dataset.colorAnimPause === 'true') return;
         if (!document.body.contains(element)) {
             clearInterval(intervalId);
             if (typeof onCleanup === 'function') onCleanup();
             return;
         }
         element.style.backgroundColor = isStartColor ? endColor : startColor;
-        isStartColor = !isStartColor;
-    }, transitionTime * 1000);
+        isStartColor = reverse ? !isStartColor : !isStartColor;
+        // If not looping, stop after one cycle
+        if (!loop && !isStartColor) {
+            clearInterval(intervalId);
+            if (typeof onCleanup === 'function') onCleanup();
+        }
+    }, speed);
     return intervalId;
 }
 
@@ -52,9 +63,15 @@ export function startGradientAnimation({ element, startColor, endColor, directio
     let angleVal = 0;
     let isStart = true;
     let intervalId = null;
+    let speed = parseInt(element.dataset.gradientSpeed) || 50;
+    let reverse = element.dataset.gradientReverse === 'true';
+    let loop = element.dataset.gradientLoop !== 'false';
+    if (element.dataset.gradientBlendMode) element.style.mixBlendMode = element.dataset.gradientBlendMode;
+    if (element.dataset.gradientOpacity) element.style.opacity = element.dataset.gradientOpacity;
     if (animStyle === 'rotate' && (gradientType === 'linear' || gradientType === 'conic')) {
         intervalId = setInterval(() => {
-            angleVal = (angleVal + 2) % 360;
+            if (element.dataset.gradientPause === 'true') return;
+            angleVal = (angleVal + (reverse ? -2 : 2) + 360) % 360;
             if (!document.body.contains(element)) {
                 clearInterval(intervalId);
                 return;
@@ -64,9 +81,13 @@ export function startGradientAnimation({ element, startColor, endColor, directio
             } else {
                 element.style.background = `linear-gradient(${angleVal}deg, ${startColor}, ${endColor})`;
             }
-        }, 50);
+            if (!loop && (angleVal === 0 || angleVal === 360)) {
+                clearInterval(intervalId);
+            }
+        }, speed);
     } else if (animStyle === 'color-shift') {
         intervalId = setInterval(() => {
+            if (element.dataset.gradientPause === 'true') return;
             if (!document.body.contains(element)) {
                 clearInterval(intervalId);
                 return;
@@ -78,8 +99,11 @@ export function startGradientAnimation({ element, startColor, endColor, directio
             } else {
                 element.style.background = `linear-gradient(${direction}, ${isStart ? startColor : endColor}, ${isStart ? endColor : startColor})`;
             }
-            isStart = !isStart;
-        }, 1000);
+            isStart = reverse ? !isStart : !isStart;
+            if (!loop && !isStart) {
+                clearInterval(intervalId);
+            }
+        }, speed * 20);
     }
     return intervalId;
 }

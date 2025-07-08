@@ -35,6 +35,11 @@ function restoreElementStatesByUID(canvas, states, colorTransitionIntervals, gra
         // Restore color transition
         if (state.colorTransition) {
             el.dataset.colorTransition = JSON.stringify(state.colorTransition);
+            // Restore all colorAnim* dataset keys if present in state
+            if (state.colorTransition.colorAnimSpeed) el.dataset.colorAnimSpeed = state.colorTransition.colorAnimSpeed;
+            if (state.colorTransition.colorAnimPause) el.dataset.colorAnimPause = state.colorTransition.colorAnimPause;
+            if (state.colorTransition.colorAnimReverse) el.dataset.colorAnimReverse = state.colorTransition.colorAnimReverse;
+            if (state.colorTransition.colorAnimLoop) el.dataset.colorAnimLoop = state.colorTransition.colorAnimLoop;
             // Cleanup previous interval
             if (colorTransitionIntervals.has(state.uid)) {
                 clearInterval(colorTransitionIntervals.get(state.uid));
@@ -52,6 +57,13 @@ function restoreElementStatesByUID(canvas, states, colorTransitionIntervals, gra
         // Restore color gradient animation
         if (state.colorGradient) {
             el.dataset.colorGradient = JSON.stringify(state.colorGradient);
+            // Restore all gradient* dataset keys if present in state
+            if (state.colorGradient.gradientSpeed) el.dataset.gradientSpeed = state.colorGradient.gradientSpeed;
+            if (state.colorGradient.gradientPause) el.dataset.gradientPause = state.colorGradient.gradientPause;
+            if (state.colorGradient.gradientReverse) el.dataset.gradientReverse = state.colorGradient.gradientReverse;
+            if (state.colorGradient.gradientLoop) el.dataset.gradientLoop = state.colorGradient.gradientLoop;
+            if (state.colorGradient.gradientBlendMode) el.dataset.gradientBlendMode = state.colorGradient.gradientBlendMode;
+            if (state.colorGradient.gradientOpacity) el.dataset.gradientOpacity = state.colorGradient.gradientOpacity;
             if (gradientAnimIntervals.has(state.uid)) {
                 clearInterval(gradientAnimIntervals.get(state.uid));
                 gradientAnimIntervals.delete(state.uid);
