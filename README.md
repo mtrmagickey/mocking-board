@@ -1,48 +1,137 @@
-# Hello website!
+# Mocking Board
 
-This is a basic HTML starter project you can build on however you like. No need to save. While you develop your site, your changes will happen ✨ immediately in the preview window. On the left you'll see the files that make up your site, including HTML, JavaScript, and CSS. You can upload assets like images or audio in `assets`. The rest is up to you and your imagination. 🦄
+Mocking Board is a browser‑based visual mockup and storyboard tool.
 
-_Last updated: 28 Feb 2023_
+It lets you drag and drop text, media, and shapes onto a canvas, customize their appearance (colors, gradients, themes, fonts), add simple animations, and export/import your layouts as JSON. It’s ideal for quickly sketching UIs, storyboards, or screen arrangements without opening a full design suite.
 
-## What's in this project?
+## Features
 
-← `README.md`: That's this file, where you can tell people what your cool website does and how you built it.
+- **Drag‑and‑drop canvas**
+	- Freeform canvas with optional snap‑to‑grid overlay.
+	- Move and resize elements with handles, plus interactive rotation.
+	- Lock mode to prevent accidental edits.
 
-← `index.html`: This is the main web page for your site. The HTML defines the structure and content of the page using _elements_. You'll see references in the HTML to the JS and CSS files. Try clicking the image in the center of the page!
+- **Rich element palette**
+	- Text: headers and paragraphs with inline text editing.
+	- Media: images, video, audio, and YouTube embeds.
+	- Shapes: rectangle, circle, line, arrow, triangle (SVG‑based).
+	- Special: elements configured for **color transitions** and **color gradients**.
 
-← `style.css`: CSS files add styling rules to your content. The CSS applies styles to the elements in your HTML page. The style rules also make the image move when you click it.
+- **Contextual editing**
+	- Right‑click (or long‑press on touch) an element for a context menu:
+		- Color tools: change color, transparency, make transparent.
+		- Text tools: font size, font color, alignment, font family.
+		- Layout tools: move forward/backward (z‑index), toggle border, delete.
+		- Media tools: change linked media URL, toggle looping for video/audio.
+		- Effects: create color transitions, gradients, and motion animations.
 
-← `script.js`: If you're feeling fancy you can add interactivity to your site with JavaScript. The code in the JavaScript file runs when the page loads, and when the visitor clicks the button you can add using the code in the TODO.
+- **Themes & styling**
+	- Theme picker with multiple curated palettes (Material, Flat UI, Tailwind‑inspired, Dark, Solarized, Pastel, Nord, Monokai, etc.).
+	- Option to **override all element backgrounds** or only fill in unset ones.
+	- Automatic contrast adjustment for text based on background color.
+	- Theme‑aware updates to SVG fills/strokes and button styles.
 
-Open each file and check out the comments (in gray) for more info.
+- **Color transitions & gradients**
+	- Color transition popup: define start/end colors and duration, per element.
+	- Gradient popup:
+		- Start/end colors, direction, and gradient type (linear, radial, conic).
+		- Optional gradient animation styles (e.g., rotate, color shift).
+	- Per‑element animation state tracked via stable `data-uid` identifiers, so animations survive undo/redo and import/export.
 
-## Try this next 🏗️
+- **Element animations**
+	- Animation popup for **move**, **scale**, and **rotate**.
+	- Duration presets with smooth, interval‑driven animation.
+	- Transform composition so rotations, translations, and scaling play nicely together.
 
-Take a look in `TODO.md` for next steps you can try out in your new site!
+- **Import, export & history**
+	- Export current layout as structured JSON (elements + canvas properties).
+	- Import a saved JSON layout to restore the scene, including animation state.
+	- Undo/redo support via `stateManager.js` and per‑element animation restoration.
 
-___Want a minimal version of this project to build your own website? Check out [Blank Website](https://glitch.com/edit/#!/remix/glitch-blank-website)!___
+## Getting started
 
-## Ready to share your site?
+### Run locally
 
-Add these meta tags for SEO and social sharing between your page `<head></head>` tags, changing the values for your site:
+This is a static web app. You can open `index.html` directly in a browser, but because it uses ES modules, it’s more reliable to serve it over a simple local web server.
 
+From the project root:
+
+```powershell
+cd "c:\Users\cpkeena2\Documents\GitHub\mocking-board"
+python -m http.server 8000
 ```
-<link rel="canonical" href="https://glitch-hello-website.glitch.me/" />
-<meta name="description" content="A simple website, built with Glitch. Remix it to get your own."/>
-<meta name="robots" content="index,follow" />
-<meta property="og:title" content="Hello World!" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="https://glitch-hello-website.glitch.me/" />
-<meta property="og:description" content="A simple website, built with Glitch. Remix it to get your own."/>
-<meta property="og:image" content="https://cdn.glitch.com/605e2a51-d45f-4d87-a285-9410ad350515%2Fhello-website-social.png?v=1616712748147"/>
-<meta name="twitter:card" content="summary" />
-```
 
-![Glitch](https://cdn.glitch.com/a9975ea6-8949-4bab-addb-8a95021dc2da%2FLogo_Color.svg?v=1602781328576)
+Then open:
 
-## You built this with Glitch!
+- `http://localhost:8000/index.html`
 
-[Glitch](https://glitch.com) is a friendly community where millions of people come together to build web apps and websites.
+in your browser.
 
-- Need more help? [Check out our Help Center](https://help.glitch.com/) for answers to any common questions.
-- Ready to make it official? [Become a paid Glitch member](https://glitch.com/pricing) to boost your app with private sharing, more storage and memory, domains and more.
+### Basic workflow
+
+1. **Add elements**
+	 - Use the **Elements** sidebar to add headers, paragraphs, images, buttons, video, audio, YouTube, shapes, or color‑effect elements.
+
+2. **Arrange on the canvas**
+	 - Drag elements to position them; use resize and rotate handles as needed.
+	 - Use **Toggle Grid** to show a 20px grid and enable snapping.
+
+3. **Edit and style**
+	 - Right‑click an element to open the context menu and:
+		 - Change colors, fonts, borders, and alignment.
+		 - Attach media via URL or Unsplash search (once you add an API key).
+		 - Apply color transitions, gradients, or motion animations.
+
+4. **Apply a theme**
+	 - Click **Theme** in the toolbar, pick a palette, and optionally override all element backgrounds.
+
+5. **Save and load**
+	 - Click **Export** to download a JSON file capturing your layout.
+	 - Click **Load** and select a JSON file to restore a saved layout.
+
+## Project structure (high level)
+
+- `index.html` – Main page, sidebar, canvas, toolbar, popups, and widget.
+- `style.css` – Layout, canvas, element styling, grid, popups, basic animations.
+- `main.js` – Current main controller wiring the UI together:
+	- Element creation and event attachment.
+	- Drag/resize/rotate logic and lock/grid behavior.
+	- Context menu actions, color tools, gradients, animations.
+	- Theme picker and theme application.
+	- JSON export/import and animation restoration.
+- `elementManager.js` – Encapsulates creation of element DOM fragments for each `data-type`.
+- `stateManager.js` – Undo/redo and saved state handling.
+- `colorAnimationUtils.js` – Helpers for colors, gradients, and animation state (e.g., `hexToRgba`, `getRandomColor`, `restoreElementAnimation`, `getElementAnimationState`).
+- `popupManager.js` – Generic popup open/close and accessibility helpers.
+- `dragResizeManager.js` – Shared drag/resize behaviors.
+- `mediaManager.js` – Media drop handling and Unsplash search wiring.
+- `exportFunctionality.js` – (Legacy/auxiliary) export logic.
+
+## Current limitations & quirks
+
+- **Unsplash integration** requires you to insert your own Unsplash Access Key (`YOUR_UNSPLASH_ACCESS_KEY`) in the search API URL.
+- **File format** is JSON with a schema that has evolved; older exports may need manual adjustment if the model changes.
+- **Single‑user, in‑browser only**: no backend persistence or collaboration yet.
+- **Accessibility** has some ARIA roles and labels, but hasn’t been fully audited.
+
+## Roadmap (high level)
+
+1. **Stabilize the core editor**
+	 - Unify around `main.js` as the single entrypoint (retire legacy `script.js`).
+	 - Centralize state (canvas + elements + animations + theme) in one model.
+	 - Make export/import work purely from this state model.
+
+2. **Polish the UX**
+	 - Improve selection visuals, keyboard shortcuts, snapping, and guides.
+	 - Streamline context menus and popups, and add lightweight onboarding.
+
+3. **Improve reliability**
+	 - Autosave, versioned JSON format, better validation on import.
+	 - Tests for key helpers and state transitions.
+
+4. **Enhance design features**
+	 - Component templates, reusable styles, more animation and gradient presets.
+
+5. **Ship‑ready packaging**
+	 - Build pipeline, docs site, demo gallery, optional backend for cloud saves.
+

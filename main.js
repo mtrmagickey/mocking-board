@@ -8,7 +8,6 @@ import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
-    const elementButtons = document.querySelectorAll('.element-button');
     const loadBtn = document.getElementById('load-btn');
     const clearBtn = document.getElementById('clear-btn');
     const exportBtn = document.getElementById('export-btn');
@@ -25,6 +24,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('sidebar');
     const toolbar = document.getElementById('toolbar');
     const widget = document.getElementById('widget');
+    const frameBar = document.getElementById('frame-bar');
+    const framePrevBtn = document.getElementById('frame-prev-btn');
+    const frameNextBtn = document.getElementById('frame-next-btn');
+    const frameAddBtn = document.getElementById('frame-add-btn');
+    const frameLabel = document.getElementById('frame-label');
+    const saveComponentBtn = document.getElementById('save-component-btn');
+    const componentsList = document.getElementById('components-list');
     const fontColorPicker = document.createElement('input');
     fontColorPicker.type = 'color';
     fontColorPicker.style.display = 'none';
@@ -54,6 +60,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const endGradientColorInput = document.getElementById('end-gradient-color');
     const gradientDirectionSelect = document.getElementById('gradient-direction');
     const applyGradientBtn = document.getElementById('apply-gradient-btn');
+
+    // Inline text toolbar (created dynamically)
+    const inlineToolbar = document.createElement('div');
+    inlineToolbar.className = 'inline-text-toolbar';
+    inlineToolbar.innerHTML = `
+        <button type="button" data-action="bold"><b>B</b></button>
+        <button type="button" data-action="italic"><i>I</i></button>
+        <button type="button" data-action="underline"><u>U</u></button>
+        <button type="button" data-action="align-left">L</button>
+        <button type="button" data-action="align-center">C</button>
+        <button type="button" data-action="align-right">R</button>
+        <button type="button" data-action="smaller">A-</button>
+        <button type="button" data-action="larger">A+</button>
+        <select data-action="preset">
+            <option value="">Style</option>
+            <option value="title">Title</option>
+            <option value="subtitle">Subtitle</option>
+            <option value="body">Body</option>
+            <option value="caption">Caption</option>
+        </select>
+    `;
+    document.body.appendChild(inlineToolbar);
 
     // --- Add gradient type selector if not present ---
     let gradientTypeSelect = document.getElementById('gradient-type');
@@ -112,23 +140,240 @@ document.addEventListener('DOMContentLoaded', () => {
     const fonts = ['Roboto', 'Pacifico', 'Old Standard TT'];
     let fontIndex = 0;
 
+    let activeEditable = null;
+
+    // --- Multi-frame / storyboard state ---
+    let frames = [];
+    let currentFrameIndex = 0;
+    let components = [];
+
+    function updateFrameLabel() {
+        if (frameLabel) {
+            frameLabel.textContent = `Frame ${currentFrameIndex + 1}`;
+        }
+    }
+
+    function snapshotCurrentCanvas() {
+        const elements = Array.from(canvas.querySelectorAll('.element')).map(el => ({
+            type: el.getAttribute('data-type') || null,
+            left: el.style.left,
+            top: el.style.top,
+            width: el.style.width,
+            height: el.style.height,
+            backgroundColor: el.style.backgroundColor,
+            color: el.style.color,
+            fontSize: el.style.fontSize,
+            fontFamily: el.style.fontFamily,
+            zIndex: el.style.zIndex,
+            border: el.style.border,
+            borderColor: el.style.borderColor,
+            rotation: el.dataset.rotation || 0,
+            innerHTML: el.innerHTML,
+            dataset: { ...el.dataset },
+        }));
+        return {
+            elements,
+            canvas: {
+                background: canvas.style.background,
+                width: canvas.style.width,
+                height: canvas.style.height,
+            }
+        };
+    }
+
+    function loadFrame(index) {
+        const frame = frames[index];
+        canvas.innerHTML = '<div id="grid" class="grid"></div>';
+        if (!frame || !frame.elements) {
+            reattachEventListeners();
+            updateFrameLabel();
+            return;
+        }
+        frame.elements.forEach(elData => {
+            const element = document.createElement('div');
+            element.className = 'element svg-container';
+            element.style.left = elData.left;
+            element.style.top = elData.top;
+            element.style.width = elData.width;
+            element.style.height = elData.height;
+            element.style.backgroundColor = elData.backgroundColor;
+            element.style.color = elData.color;
+            element.style.fontSize = elData.fontSize;
+            element.style.fontFamily = elData.fontFamily;
+            element.style.zIndex = elData.zIndex;
+            element.style.border = elData.border;
+            element.style.borderColor = elData.borderColor;
+            element.innerHTML = elData.innerHTML;
+            if (elData.dataset) {
+                Object.keys(elData.dataset).forEach(key => {
+                    element.dataset[key] = elData.dataset[key];
+                });
+            }
+            if (elData.rotation) {
+                element.style.transform = `rotate(${elData.rotation}deg)`;
+            }
+            if (!element.querySelector('.resize-handle')) {
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                element.appendChild(resizeHandle);
+            }
+            canvas.appendChild(element);
+            attachElementInteractions(element);
+        });
+        canvas.style.background = frame.canvas && frame.canvas.background ? frame.canvas.background : canvas.style.background;
+        reattachEventListeners();
+        if (typeof restoreElementAnimations === 'function') restoreElementAnimations();
+        updateFrameLabel();
+    }
+
+    function attachElementInteractions(element) {
+        if (!element) return;
+        const resizeHandle = element.querySelector('.resize-handle');
+        const rotateHandle = element.querySelector('.rotate-handle');
+        element.addEventListener('pointerdown', startDragging);
+        element.addEventListener('contextmenu', showContextMenu);
+        if (resizeHandle) {
+            resizeHandle.addEventListener('pointerdown', startResizing);
+        }
+        if (rotateHandle) {
+            rotateHandle.addEventListener('pointerdown', startRotating);
+        }
+        const iframeElement = element.querySelector('iframe');
+        if (iframeElement) {
+            iframeElement.addEventListener('pointerdown', (e) => e.stopPropagation());
+        }
+        const mediaElements = element.querySelectorAll('video, audio');
+        mediaElements.forEach(media => {
+            media.addEventListener('pointerdown', (e) => e.stopPropagation());
+        });
+
+        const editables = element.querySelectorAll('.editable');
+        editables.forEach(editable => {
+            editable.addEventListener('focus', (e) => showInlineToolbar(e.target));
+            editable.addEventListener('blur', () => {
+                activeEditable = null;
+                hideInlineToolbar();
+            });
+        });
+    }
+
     function reattachEventListeners() {
         const elements = canvas.querySelectorAll('.element');
-        elements.forEach(el => {
-            el.addEventListener('pointerdown', startDragging);
-            el.addEventListener('contextmenu', showContextMenu);
-            const resizeHandle = el.querySelector('.resize-handle');
-            if (resizeHandle) {
-                resizeHandle.addEventListener('pointerdown', startResizing);
-            }
-            const iframeElement = el.querySelector('iframe');
-            if (iframeElement) {
-                iframeElement.addEventListener('pointerdown', (e) => e.stopPropagation());
-            }
-            const mediaElements = el.querySelectorAll('video, audio');
-            mediaElements.forEach(media => {
-                media.addEventListener('pointerdown', (e) => e.stopPropagation());
+        elements.forEach(el => attachElementInteractions(el));
+    }
+
+    // Initialize first empty frame
+    frames[0] = snapshotCurrentCanvas();
+    updateFrameLabel();
+
+    if (framePrevBtn) {
+        framePrevBtn.addEventListener('click', () => {
+            frames[currentFrameIndex] = snapshotCurrentCanvas();
+            const nextIndex = Math.max(0, currentFrameIndex - 1);
+            currentFrameIndex = nextIndex;
+            loadFrame(currentFrameIndex);
+        });
+    }
+    if (frameNextBtn) {
+        frameNextBtn.addEventListener('click', () => {
+            frames[currentFrameIndex] = snapshotCurrentCanvas();
+            const nextIndex = Math.min(frames.length - 1, currentFrameIndex + 1);
+            currentFrameIndex = nextIndex;
+            loadFrame(currentFrameIndex);
+        });
+    }
+    if (frameAddBtn) {
+        frameAddBtn.addEventListener('click', () => {
+            frames[currentFrameIndex] = snapshotCurrentCanvas();
+            const emptyFrame = { elements: [], canvas: { background: canvas.style.background, width: canvas.style.width, height: canvas.style.height } };
+            frames.push(emptyFrame);
+            currentFrameIndex = frames.length - 1;
+            loadFrame(currentFrameIndex);
+        });
+    }
+
+    function getSelectedElementsSnapshot() {
+        const selectedEls = Array.from(canvas.querySelectorAll('.element.element--selected'));
+        if (!selectedEls.length) return null;
+        return selectedEls.map(el => ({
+            type: el.getAttribute('data-type') || null,
+            left: el.style.left,
+            top: el.style.top,
+            width: el.style.width,
+            height: el.style.height,
+            backgroundColor: el.style.backgroundColor,
+            color: el.style.color,
+            fontSize: el.style.fontSize,
+            fontFamily: el.style.fontFamily,
+            zIndex: el.style.zIndex,
+            border: el.style.border,
+            borderColor: el.style.borderColor,
+            rotation: el.dataset.rotation || 0,
+            innerHTML: el.innerHTML,
+            dataset: { ...el.dataset },
+        }));
+    }
+
+    function renderComponentsList() {
+        if (!componentsList) return;
+        componentsList.innerHTML = '';
+        components.forEach((comp, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = comp.name || `Component ${index + 1}`;
+            btn.addEventListener('click', () => {
+                const offsetX = 20;
+                const offsetY = 20;
+                comp.elements.forEach(elData => {
+                    const element = document.createElement('div');
+                    element.className = 'element svg-container';
+                    const baseLeft = parseInt(elData.left || '0', 10) || 0;
+                    const baseTop = parseInt(elData.top || '0', 10) || 0;
+                    element.style.left = `${baseLeft + offsetX}px`;
+                    element.style.top = `${baseTop + offsetY}px`;
+                    element.style.width = elData.width;
+                    element.style.height = elData.height;
+                    element.style.backgroundColor = elData.backgroundColor;
+                    element.style.color = elData.color;
+                    element.style.fontSize = elData.fontSize;
+                    element.style.fontFamily = elData.fontFamily;
+                    element.style.zIndex = elData.zIndex;
+                    element.style.border = elData.border;
+                    element.style.borderColor = elData.borderColor;
+                    element.innerHTML = elData.innerHTML;
+                    if (elData.dataset) {
+                        Object.keys(elData.dataset).forEach(key => {
+                            element.dataset[key] = elData.dataset[key];
+                        });
+                    }
+                    if (elData.rotation) {
+                        element.style.transform = `rotate(${elData.rotation}deg)`;
+                    }
+                    if (!element.querySelector('.resize-handle')) {
+                        const resizeHandle = document.createElement('div');
+                        resizeHandle.className = 'resize-handle';
+                        element.appendChild(resizeHandle);
+                    }
+                    canvas.appendChild(element);
+                    attachElementInteractions(element);
+                });
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             });
+            componentsList.appendChild(btn);
+        });
+    }
+
+    if (saveComponentBtn) {
+        saveComponentBtn.addEventListener('click', () => {
+            const elements = getSelectedElementsSnapshot();
+            if (!elements) {
+                alert('Select one or more elements on the canvas first.');
+                return;
+            }
+            const name = prompt('Name this component:', `Component ${components.length + 1}`) || `Component ${components.length + 1}`;
+            components.push({ name, elements });
+            renderComponentsList();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         });
     }
 
@@ -137,27 +382,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = e.target.closest('.element-button');
         if (button && !isLocked) {
             const type = button.getAttribute('data-type');
-            let element;
-            if (type === 'youtube') {
-                const youtubeUrl = prompt("Enter the YouTube URL:");
-                const youtubeID = extractYouTubeID(youtubeUrl);
-                if (youtubeID) {
-                    element = createElementFromManager(type);
-                    element.innerHTML = `<iframe src="https://www.youtube.com/embed/${youtubeID}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-                } else {
-                    alert("Invalid YouTube URL.");
-                    return;
-                }
-            } else {
-                element = createElementFromManager(type);
-            }
+            const element = createElementFromManager(type);
             canvas.appendChild(element);
+            attachElementInteractions(element);
+            setSelectedElement(element);
             // --- Always open color selection popups for colorTransition and colorGradient ---
             if (type === 'colorTransition') {
-                selectedElement = element;
                 openColorTransitionPopup();
             } else if (type === 'colorGradient') {
-                selectedElement = element;
                 openColorGradientPopup();
             }
             if (typeof saveState === 'function' && canvas) {
@@ -276,167 +508,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else if (id === 'deleteElement') {
             if (selectedElement) {
+                clearAllIntervalsForElement(selectedElement);
                 selectedElement.remove();
-                saveState();
+                setSelectedElement(null);
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         }
         contextMenu.style.display = 'none';
     });
 
-    function generateUID(length = 9) {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let uid = '';
-        for (let i = 0; i < length; i++) {
-            uid += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return uid;
-    }
-
-    function createElement(type) {
-        saveState();
-        const element = document.createElement('div');
-        element.className = 'element';
-        element.style.left = '10px';
-        element.style.top = '10px';
-        element.style.width = '200px';
-        element.style.height = '100px';
-        // --- Transparent background for shapes/lines ---
-        if (["rectangle","circle","line","arrow","triangle"].includes(type)) {
-            element.style.background = 'none';
-            element.style.backgroundColor = 'rgba(0,0,0,0)';
-        } else {
-            element.style.backgroundColor = getRandomColor();
-        }
-
-        // --- Assign data-type and unique data-id at creation ---
-        element.setAttribute('data-type', type);
-        element.setAttribute('data-id', 'el-' + Date.now() + '-' + Math.floor(Math.random() * 1000000));
-        // --- Assign unique 9-char alphanumeric UID ---
-        element.setAttribute('data-uid', generateUID());
-
-        switch(type) {
-            case 'header':
-                element.innerHTML = '<div class="editable" contenteditable="true"><div class="text-format-toolbar"></div><h2>Header</h2></div>';
-                break;
-            case 'paragraph':
-                element.innerHTML = '<div class="editable" contenteditable="true"><div class="text-format-toolbar"></div><p>This is a paragraph.</p></div>';
-                break;
-            case 'image':
-                element.innerHTML = '<img src="https://github.com/mtrmagickey/mocking-board/blob/main/Mocking-Board_logo.png?raw=true" alt="Placeholder">';
-                break;
-            case 'button':
-                element.innerHTML = '<div class="editable" contenteditable="true"><button>Click me</button></div>';
-                break;
-            case 'video':
-                element.innerHTML = '<video width="100%" height="100%" controls><source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">Your browser does not support the video tag.</video>';
-                element.querySelector('video').addEventListener('pointerdown', (e) => e.stopPropagation());
-                break;
-            case 'audio':
-                element.innerHTML = '<audio controls><source src="https://www.w3schools.com/html/horse.ogg" type="audio/ogg">Your browser does not support the audio element.</audio>';
-                element.querySelector('audio').addEventListener('pointerdown', (e) => e.stopPropagation());
-                break;
-            case 'youtube':
-                const youtubeUrl = prompt("Enter the YouTube URL:");
-                const youtubeID = extractYouTubeID(youtubeUrl);
-                if (youtubeID) {
-                    element.innerHTML = `<iframe src="https://www.youtube.com/embed/${youtubeID}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-                } else {
-                    alert("Invalid YouTube URL.");
-                }
-                break;
-            case 'colorTransition':
-                openColorTransitionPopup();
-                selectedElement = element;
-                break;
-            case 'colorGradient':
-                openColorGradientPopup();
-                selectedElement = element;
-                break;
-            case 'rectangle':
-                element.innerHTML = '<svg width="100%" height="100%"><rect width="100%" height="100%" fill="#3498db"></rect></svg>';
-                break;
-            case 'circle':
-                element.innerHTML = '<svg width="100%" height="100%"><circle cx="50%" cy="50%" r="50%" fill="#3498db"></circle></svg>';
-                break;
-            case 'line':
-                element.innerHTML = '<svg width="100%" height="100%"><line x1="0" y1="0" x2="100%" y2="100%" stroke="#3498db" stroke-width="2"></line>';
-                break;
-            case 'arrow':
-                element.innerHTML = '<svg width="100%" height="100%" viewBox="0 0 100 100"><line x1="0" y1="50" x2="70" y2="50" stroke="#3498db" stroke-width="4"/><polygon points="70,40 70,60 100,50" fill="#3498db"/></svg>';
-                break;
-            case 'triangle':
-                element.innerHTML = '<svg width="100%" height="100%" viewBox="0 0 100 100"><polygon points="50,0 0,100 100,100" fill="#3498db"/></svg>';
-                break;
-        }
-
-        // --- Add rotate handle ---
-        const rotateHandle = document.createElement('div');
-        rotateHandle.className = 'rotate-handle';
-        rotateHandle.title = 'Rotate';
-        rotateHandle.style.position = 'absolute';
-        rotateHandle.style.top = '-18px';
-        rotateHandle.style.right = '50%';
-        rotateHandle.style.transform = 'translateX(50%)';
-        rotateHandle.style.width = '20px';
-        rotateHandle.style.height = '20px';
-        rotateHandle.style.background = '#fff';
-        rotateHandle.style.border = '2px solid #888';
-        rotateHandle.style.borderRadius = '50%';
-        rotateHandle.style.cursor = 'grab';
-        rotateHandle.style.zIndex = '10';
-        rotateHandle.style.boxShadow = '0 1px 4px #0002';
-        rotateHandle.style.display = isLocked ? 'none' : 'block';
-        rotateHandle.innerHTML = '<svg width="20" height="20"><circle cx="10" cy="10" r="8" stroke="#888" stroke-width="2" fill="none"/><path d="M10 2 A8 8 0 0 1 18 10" stroke="#888" stroke-width="2" fill="none"/></svg>';
-        element.appendChild(rotateHandle);
-
-        const resizeHandle = document.createElement('div');
-        resizeHandle.className = 'resize-handle';
-        element.appendChild(resizeHandle);
-
-        // --- Rotate logic ---
-        let rotating = false;
-        let startAngle = 0;
-        let startRotation = 0;
-        rotateHandle.addEventListener('pointerdown', function(e) {
-            e.stopPropagation();
-            rotating = true;
-            const rect = element.getBoundingClientRect();
-            const center = {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2
-            };
-            startAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
-            startRotation = parseFloat(element.dataset.rotation) || 0;
-            document.body.style.cursor = 'grabbing';
-            function onMove(ev) {
-                if (!rotating) return;
-                const angle = Math.atan2(ev.clientY - center.y, ev.clientX - center.x);
-                let deg = (startRotation + (angle - startAngle) * 180 / Math.PI) % 360;
-                if (deg < 0) deg += 360;
-                element.style.transform = `rotate(${deg}deg)`;
-                element.dataset.rotation = deg;
-            }
-            function onUp() {
-                rotating = false;
-                document.body.style.cursor = '';
-                document.removeEventListener('pointermove', onMove);
-                document.removeEventListener('pointerup', onUp);
-                if (typeof saveState === 'function' && canvas) saveState();
-            }
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-        });
-
-        element.addEventListener('pointerdown', startDragging);
-        element.addEventListener('contextmenu', showContextMenu);
-        resizeHandle.addEventListener('pointerdown', startResizing);
-        rotateHandle.addEventListener('pointerdown', startRotating);
-        canvas.appendChild(element);
-
-        // Update resize/rotate handles visibility based on initial lock state
-        updateResizeHandles();
-        updateRotateHandles();
-    }
+    // Legacy generateUID/createElement logic has been replaced by elementManager.createElement
 
     // --- Interactive rotation logic ---
     let rotatingElement = null;
@@ -578,17 +659,106 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('pointerup', stopResizing);
     }
 
+    function setSelectedElement(el) {
+        if (selectedElement === el) return;
+        if (selectedElement) {
+            selectedElement.classList.remove('element--selected');
+        }
+        selectedElement = el;
+        if (selectedElement) {
+            selectedElement.classList.add('element--selected');
+        }
+    }
+
+    const textPresets = {
+        title: {
+            fontSize: '28px',
+            fontWeight: '700',
+            lineHeight: '1.2'
+        },
+        subtitle: {
+            fontSize: '20px',
+            fontWeight: '600',
+            lineHeight: '1.3'
+        },
+        body: {
+            fontSize: '16px',
+            fontWeight: '400',
+            lineHeight: '1.5'
+        },
+        caption: {
+            fontSize: '12px',
+            fontWeight: '400',
+            lineHeight: '1.4'
+        }
+    };
+
+    function showInlineToolbar(target) {
+        activeEditable = target;
+        const rect = target.getBoundingClientRect();
+        inlineToolbar.style.left = `${rect.left + window.scrollX}px`;
+        inlineToolbar.style.top = `${rect.top + window.scrollY - inlineToolbar.offsetHeight - 4}px`;
+        inlineToolbar.style.display = 'flex';
+    }
+
+    function hideInlineToolbar() {
+        inlineToolbar.style.display = 'none';
+    }
+
+    inlineToolbar.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+    });
+
+    inlineToolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn || !activeEditable) return;
+        const action = btn.dataset.action;
+        const style = activeEditable.style;
+        if (action === 'bold') {
+            style.fontWeight = style.fontWeight === '700' ? '400' : '700';
+        } else if (action === 'italic') {
+            style.fontStyle = style.fontStyle === 'italic' ? 'normal' : 'italic';
+        } else if (action === 'underline') {
+            style.textDecoration = style.textDecoration === 'underline' ? 'none' : 'underline';
+        } else if (action === 'align-left') {
+            style.textAlign = 'left';
+        } else if (action === 'align-center') {
+            style.textAlign = 'center';
+        } else if (action === 'align-right') {
+            style.textAlign = 'right';
+        } else if (action === 'smaller') {
+            const current = parseInt(window.getComputedStyle(activeEditable).fontSize || '16', 10);
+            style.fontSize = `${Math.max(8, current - 2)}px`;
+        } else if (action === 'larger') {
+            const current = parseInt(window.getComputedStyle(activeEditable).fontSize || '16', 10);
+            style.fontSize = `${current + 2}px`;
+        }
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    });
+
+    inlineToolbar.querySelector('select[data-action="preset"]').addEventListener('change', (e) => {
+        if (!activeEditable) return;
+        const preset = textPresets[e.target.value];
+        if (preset) {
+            Object.assign(activeEditable.style, preset);
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        }
+    });
+
     function showContextMenu(e) {
         e.preventDefault();
         if (isLocked) return;
-        selectedElement = e.target.closest('.element');
+        setSelectedElement(e.target.closest('.element'));
         contextMenu.style.display = 'block';
         contextMenu.style.left = `${e.clientX}px`;
         contextMenu.style.top = `${e.clientY}px`;
     }
 
-    document.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
         contextMenu.style.display = 'none';
+        if (!e.target.closest('.element') && e.target !== contextMenu) {
+            setSelectedElement(null);
+        }
     });
 
     document.getElementById('changeColor').addEventListener('click', () => {
@@ -623,7 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             element.style.backgroundColor = color;
         }
-        saveState();
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
     document.getElementById('rotateElement').addEventListener('click', () => {
@@ -742,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const newSize = prompt("Enter the new font size (e.g., 16px, 2em, 150%):");
             if (newSize) {
                 selectedElement.style.fontSize = newSize;
-                saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         }
     });
@@ -773,7 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editableElements.forEach(el => {
                 el.style.textAlign = alignments[alignmentIndex];
             });
-            saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
 
@@ -784,14 +954,14 @@ document.addEventListener('DOMContentLoaded', () => {
             editableElements.forEach(el => {
                 el.style.fontFamily = fonts[fontIndex];
             });
-            saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
 
     document.getElementById('makeTransparent').addEventListener('click', () => {
         if (selectedElement) {
             selectedElement.style.backgroundColor = 'rgba(43, 38, 34, 0)';
-            saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
 
@@ -1364,7 +1534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.style.borderColor = theme.colors[(i + 2) % theme.colors.length];
         });
         // Save theme in state for undo/redo
-        saveState();
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
     // Initial render
@@ -1384,56 +1554,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 reader.onload = (e) => {
                     const imported = JSON.parse(e.target.result);
                     if (imported && imported.elements) {
-                        canvas.innerHTML = '';
-                        imported.elements.forEach(elData => {
-                            const element = document.createElement('div');
-                            element.className = 'element svg-container';
-                            // Restore styles
-                            element.style.left = elData.left;
-                            element.style.top = elData.top;
-                            element.style.width = elData.width;
-                            element.style.height = elData.height;
-                            element.style.backgroundColor = elData.backgroundColor;
-                            element.style.color = elData.color;
-                            element.style.fontSize = elData.fontSize;
-                            element.style.fontFamily = elData.fontFamily;
-                            element.style.zIndex = elData.zIndex;
-                            element.style.border = elData.border;
-                            element.style.borderColor = elData.borderColor;
-                            element.innerHTML = elData.innerHTML;
-                            // Restore all dataset attributes
-                            if (elData.dataset) {
-                                Object.keys(elData.dataset).forEach(key => {
-                                    element.dataset[key] = elData.dataset[key];
-                                });
-                            }
-                            // Restore rotation
-                            if (elData.rotation) {
-                                element.style.transform = `rotate(${elData.rotation}deg)`;
-                            }
-                            // Add resize handle
-                            const resizeHandle = document.createElement('div');
-                            resizeHandle.className = 'resize-handle';
-                            element.appendChild(resizeHandle);
-                            // Reattach listeners
-                            element.addEventListener('pointerdown', startDragging);
-                            element.addEventListener('contextmenu', showContextMenu);
-                            resizeHandle.addEventListener('pointerdown', startResizing);
-                            // Media/iframe listeners
-                            const iframeElement = element.querySelector('iframe');
-                            if (iframeElement) {
-                                iframeElement.addEventListener('pointerdown', (e) => e.stopPropagation());
-                            }
-                            const mediaElements = element.querySelectorAll('video, audio');
-                            mediaElements.forEach(media => {
-                                media.addEventListener('pointerdown', (e) => e.stopPropagation());
-                            });
-                            canvas.appendChild(element);
-                        });
-                        // Restore all per-UID animations/intervals
-                        if (typeof restoreElementAnimations === 'function') restoreElementAnimations();
+                        frames = [imported];
+                        currentFrameIndex = 0;
+                        loadFrame(0);
                         alert('Layout loaded!');
-                        saveState();
+                        if (typeof saveState === 'function' && canvas) saveState(canvas);
                     } else {
                         alert('Invalid layout file.');
                     }
@@ -1629,4 +1754,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     updateResizeHandles();
+    
+    // Keyboard shortcuts: undo/redo, delete, and nudge selected element
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            undo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals);
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+            e.preventDefault();
+            redo(canvas, reattachEventListeners, colorTransitionIntervals, gradientAnimIntervals);
+            return;
+        }
+
+        if (isLocked) return;
+
+        if (!selectedElement) return;
+
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            clearAllIntervalsForElement(selectedElement);
+            selectedElement.remove();
+            setSelectedElement(null);
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            return;
+        }
+
+        const step = e.shiftKey ? 10 : 2;
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            const currentLeft = parseInt(selectedElement.style.left || '0', 10) || 0;
+            const currentTop = parseInt(selectedElement.style.top || '0', 10) || 0;
+            let newLeft = currentLeft;
+            let newTop = currentTop;
+            if (e.key === 'ArrowLeft') newLeft -= step;
+            if (e.key === 'ArrowRight') newLeft += step;
+            if (e.key === 'ArrowUp') newTop -= step;
+            if (e.key === 'ArrowDown') newTop += step;
+            if (gridEnabled) {
+                const gridSize = 20;
+                newLeft = Math.round(newLeft / gridSize) * gridSize;
+                newTop = Math.round(newTop / gridSize) * gridSize;
+            }
+            selectedElement.style.left = `${newLeft}px`;
+            selectedElement.style.top = `${newTop}px`;
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        }
+    });
 });

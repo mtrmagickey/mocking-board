@@ -26,10 +26,21 @@
                 <button class="element-button" data-type="colorTransition" aria-label="Add color transition">Color Transition</button>
                 <button class="element-button" data-type="colorGradient" aria-label="Add color gradient">Color Gradient</button>
             </div>
+            <h2 id="components-heading">Components</h2>
+            <div id="components-panel" role="group" aria-labelledby="components-heading">
+                <button id="save-component-btn" aria-label="Save selection as component">Save Selection as Component</button>
+                <div id="components-list" aria-label="Saved components"></div>
+            </div>
         </nav>
         <main id="canvas-container" class="canvas-container" role="main">
             <div id="canvas" class="canvas" aria-label="Design canvas" tabindex="0">
                 <div id="grid" class="grid"></div>
+            </div>
+            <div id="frame-bar" class="frame-bar" aria-label="Storyboard frames">
+                <button id="frame-prev-btn" aria-label="Previous frame">◀</button>
+                <span id="frame-label">Frame 1</span>
+                <button id="frame-next-btn" aria-label="Next frame">▶</button>
+                <button id="frame-add-btn" aria-label="Add new frame">+ Frame</button>
             </div>
         </main>
         <div id="toolbar" class="toolbar collapsed" role="toolbar" aria-label="Main toolbar">
