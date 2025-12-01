@@ -38,6 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomInBtn = document.getElementById('zoom-in-btn');
     const zoomFitBtn = document.getElementById('zoom-fit-btn');
     const zoomLabel = document.getElementById('zoom-label');
+    const groupBtn = document.getElementById('group-btn');
+    const ungroupBtn = document.getElementById('ungroup-btn');
+    const animationsPanel = document.getElementById('animations-panel');
+    const animationsList = document.getElementById('animations-list');
+    const reduceMotionToggle = document.getElementById('reduce-motion-toggle');
 
     const fontColorPicker = document.createElement('input');
     fontColorPicker.type = 'color';
@@ -104,6 +109,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <option value="body">Body</option>
             <option value="caption">Caption</option>
         </select>
+        <select data-action="font-family">
+            <option value="">Font</option>
+            <option value="Roboto, sans-serif">Roboto</option>
+            <option value="Old Standard TT, serif">Old Standard</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="" disabled>────────</option>
+            <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
+        </select>
+        <label style="font-size:10px;margin-left:4px;">LH
+            <input type="number" data-action="line-height" min="1" max="3" step="0.1" style="width:38px;" />
+        </label>
+        <div class="color-swatches" data-action="swatches"></div>
+        <button type="button" data-action="pin-color" title="Pin current text color">★</button>
     `;
     document.body.appendChild(inlineToolbar);
 
@@ -165,6 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let fontIndex = 0;
 
     let activeEditable = null;
+    let marquee = null;
+    let marqueeStart = null;
+    let hGuide = null;
+    let vGuide = null;
 
     // --- Multi-frame / storyboard state ---
     let frames = [];
@@ -788,6 +810,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function enterPlayMode() {
         if (isPlayMode || !frames.length) return;
+        // Commit current canvas into the current frame before starting playback
+        frames[currentFrameIndex] = snapshotCurrentCanvas();
+        if (frames.length < 2) {
+            alert('Add at least two frames to use Play mode.');
+            return;
+        }
         isPlayMode = true;
         canvasContainer.classList.add('play-mode');
         if (playModeBtn) playModeBtn.textContent = 'Stop';
@@ -1078,11 +1106,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedElement) {
                 selectedElement.style.zIndex = (parseInt(selectedElement.style.zIndex) || 0) - 1;
             }
+        } else if (id === 'groupSelection') {
+            groupSelection();
+        } else if (id === 'ungroupSelection') {
+            ungroupSelection();
+        } else if (id === 'alignLeft') {
+            alignSelection('left');
+        } else if (id === 'alignCenter') {
+            alignSelection('h-center');
+        } else if (id === 'alignTop') {
+            alignSelection('top');
+        } else if (id === 'alignMiddle') {
+            alignSelection('v-center');
         } else if (id === 'deleteElement') {
             if (selectedElement) {
                 clearAllIntervalsForElement(selectedElement);
                 selectedElement.remove();
-                setSelectedElement(null);
+                clearSelection();
                 if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         }
@@ -1145,7 +1185,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startDragging(e) {
         if (e.target.className === 'resize-handle' || isLocked) return;
-        draggedElement = e.target.closest('.element');
+        const targetElement = e.target.closest('.element');
+        if (!targetElement) {
+            if (e.target === canvas || e.target.id === 'grid') {
+                startMarquee(e);
+            }
+            return;
+        }
+        draggedElement = targetElement;
         offset = {
             x: e.clientX - draggedElement.offsetLeft,
             y: e.clientY - draggedElement.offsetTop
@@ -1180,16 +1227,78 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!draggedElement) return;
         const now = Date.now();
         if (now - lastPointerMoveTime > 50) { // Throttle to 20 FPS
-            draggedElement.style.left = `${e.clientX - offset.x}px`;
-            draggedElement.style.top = `${e.clientY - offset.y}px`;
+            let newLeft = e.clientX - offset.x;
+            let newTop = e.clientY - offset.y;
 
+            const canvasRect = canvas.getBoundingClientRect();
+            const elRect = draggedElement.getBoundingClientRect();
+            const elWidth = elRect.width;
+            const elHeight = elRect.height;
+            const snapThreshold = 6;
+
+            // Grid snapping
             if (gridEnabled) {
                 const gridSize = 20;
-                const left = Math.round((e.clientX - offset.x) / gridSize) * gridSize;
-                const top = Math.round((e.clientY - offset.y) / gridSize) * gridSize;
-                draggedElement.style.left = `${left}px`;
-                draggedElement.style.top = `${top}px`;
+                newLeft = Math.round(newLeft / gridSize) * gridSize;
+                newTop = Math.round(newTop / gridSize) * gridSize;
             }
+
+            // Clear previous guides
+            if (hGuide) hGuide.remove();
+            if (vGuide) vGuide.remove();
+            hGuide = null;
+            vGuide = null;
+
+            // Collect candidate snap lines from other elements
+            const others = Array.from(canvas.querySelectorAll('.element')).filter(el => el !== draggedElement);
+            const target = {
+                left: newLeft,
+                right: newLeft + elWidth,
+                hCenter: newLeft + elWidth / 2,
+                top: newTop,
+                bottom: newTop + elHeight,
+                vCenter: newTop + elHeight / 2
+            };
+
+            let snapLeft = newLeft;
+            let snapTop = newTop;
+
+            others.forEach(el => {
+                const r = el.getBoundingClientRect();
+                const oLeft = r.left - canvasRect.left;
+                const oRight = oLeft + r.width;
+                const oHCenter = oLeft + r.width / 2;
+                const oTop = r.top - canvasRect.top;
+                const oBottom = oTop + r.height;
+                const oVCenter = oTop + r.height / 2;
+
+                // Vertical snapping (x-axis): left, center, right
+                if (Math.abs(target.left - oLeft) <= snapThreshold) {
+                    snapLeft = oLeft;
+                    vGuide = vGuide || createVGuide(oLeft);
+                } else if (Math.abs(target.hCenter - oHCenter) <= snapThreshold) {
+                    snapLeft = oHCenter - elWidth / 2;
+                    vGuide = vGuide || createVGuide(oHCenter);
+                } else if (Math.abs(target.right - oRight) <= snapThreshold) {
+                    snapLeft = oRight - elWidth;
+                    vGuide = vGuide || createVGuide(oRight);
+                }
+
+                // Horizontal snapping (y-axis): top, center, bottom
+                if (Math.abs(target.top - oTop) <= snapThreshold) {
+                    snapTop = oTop;
+                    hGuide = hGuide || createHGuide(oTop);
+                } else if (Math.abs(target.vCenter - oVCenter) <= snapThreshold) {
+                    snapTop = oVCenter - elHeight / 2;
+                    hGuide = hGuide || createHGuide(oVCenter);
+                } else if (Math.abs(target.bottom - oBottom) <= snapThreshold) {
+                    snapTop = oBottom - elHeight;
+                    hGuide = hGuide || createHGuide(oBottom);
+                }
+            });
+
+            draggedElement.style.left = `${snapLeft}px`;
+            draggedElement.style.top = `${snapTop}px`;
             lastPointerMoveTime = now;
         }
     }
@@ -1198,6 +1307,80 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedElement = null;
         document.removeEventListener('pointermove', drag);
         document.removeEventListener('pointerup', stopDragging);
+        if (hGuide) hGuide.remove();
+        if (vGuide) vGuide.remove();
+        hGuide = null;
+        vGuide = null;
+    }
+
+    function createHGuide(y) {
+        const g = document.createElement('div');
+        g.className = 'snap-guide horizontal';
+        g.style.top = y + 'px';
+        g.style.left = '0px';
+        canvas.appendChild(g);
+        return g;
+    }
+
+    function createVGuide(x) {
+        const g = document.createElement('div');
+        g.className = 'snap-guide vertical';
+        g.style.left = x + 'px';
+        g.style.top = '0px';
+        canvas.appendChild(g);
+        return g;
+    }
+
+    function startMarquee(e) {
+        if (marquee) return;
+        marqueeStart = { x: e.clientX, y: e.clientY };
+        marquee = document.createElement('div');
+        marquee.className = 'marquee-selection';
+        canvas.appendChild(marquee);
+        document.addEventListener('pointermove', updateMarquee);
+        document.addEventListener('pointerup', finishMarquee);
+        clearSelection();
+    }
+
+    function updateMarquee(e) {
+        if (!marquee || !marqueeStart) return;
+        const rect = canvas.getBoundingClientRect();
+        const x1 = Math.min(marqueeStart.x, e.clientX) - rect.left;
+        const y1 = Math.min(marqueeStart.y, e.clientY) - rect.top;
+        const x2 = Math.max(marqueeStart.x, e.clientX) - rect.left;
+        const y2 = Math.max(marqueeStart.y, e.clientY) - rect.top;
+        marquee.style.left = x1 + 'px';
+        marquee.style.top = y1 + 'px';
+        marquee.style.width = (x2 - x1) + 'px';
+        marquee.style.height = (y2 - y1) + 'px';
+
+        const mRect = { left: x1, top: y1, right: x2, bottom: y2 };
+        canvas.querySelectorAll('.element').forEach(el => {
+            const elRect = el.getBoundingClientRect();
+            const ex1 = elRect.left - rect.left;
+            const ey1 = elRect.top - rect.top;
+            const ex2 = ex1 + elRect.width;
+            const ey2 = ey1 + elRect.height;
+            const intersects = !(ex2 < mRect.left || ex1 > mRect.right || ey2 < mRect.top || ey1 > mRect.bottom);
+            if (intersects) {
+                el.classList.add('element--selected');
+            } else {
+                el.classList.remove('element--selected');
+            }
+        });
+    }
+
+    function finishMarquee() {
+        if (marquee) {
+            marquee.remove();
+            marquee = null;
+            marqueeStart = null;
+        }
+        document.removeEventListener('pointermove', updateMarquee);
+        document.removeEventListener('pointerup', finishMarquee);
+        const selectedEls = canvas.querySelectorAll('.element.element--selected');
+        selectedElement = selectedEls.length === 1 ? selectedEls[0] : null;
+        updateBgModeLabel();
     }
 
     function startResizing(e) {
@@ -1231,6 +1414,103 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('pointerup', stopResizing);
     }
 
+    function alignSelection(mode) {
+        const selectedEls = Array.from(canvas.querySelectorAll('.element.element--selected'));
+        if (selectedEls.length < 2) return;
+        const rects = selectedEls.map(el => el.getBoundingClientRect());
+        const canvasRect = canvas.getBoundingClientRect();
+
+        if (mode === 'left' || mode === 'h-center' || mode === 'right') {
+            const base = mode === 'left'
+                ? Math.min(...rects.map(r => r.left))
+                : mode === 'right'
+                ? Math.max(...rects.map(r => r.right))
+                : (Math.min(...rects.map(r => r.left)) + Math.max(...rects.map(r => r.right))) / 2;
+            selectedEls.forEach((el, idx) => {
+                const r = rects[idx];
+                let newLeft;
+                if (mode === 'left') newLeft = base;
+                else if (mode === 'right') newLeft = base - r.width;
+                else newLeft = base - r.width / 2;
+                el.style.left = (newLeft - canvasRect.left) + 'px';
+            });
+        } else if (mode === 'top' || mode === 'v-center' || mode === 'bottom') {
+            const base = mode === 'top'
+                ? Math.min(...rects.map(r => r.top))
+                : mode === 'bottom'
+                ? Math.max(...rects.map(r => r.bottom))
+                : (Math.min(...rects.map(r => r.top)) + Math.max(...rects.map(r => r.bottom))) / 2;
+            selectedEls.forEach((el, idx) => {
+                const r = rects[idx];
+                let newTop;
+                if (mode === 'top') newTop = base;
+                else if (mode === 'bottom') newTop = base - r.height;
+                else newTop = base - r.height / 2;
+                el.style.top = (newTop - canvasRect.top) + 'px';
+            });
+        }
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
+    function groupSelection() {
+        const selectedEls = Array.from(canvas.querySelectorAll('.element.element--selected'));
+        if (selectedEls.length < 2) return;
+
+        const rects = selectedEls.map(el => el.getBoundingClientRect());
+        const canvasRect = canvas.getBoundingClientRect();
+        const minLeft = Math.min(...rects.map(r => r.left));
+        const minTop = Math.min(...rects.map(r => r.top));
+        const maxRight = Math.max(...rects.map(r => r.right));
+        const maxBottom = Math.max(...rects.map(r => r.bottom));
+
+        const group = document.createElement('div');
+        group.className = 'element group-element';
+        group.style.position = 'absolute';
+        group.style.left = (minLeft - canvasRect.left) + 'px';
+        group.style.top = (minTop - canvasRect.top) + 'px';
+        group.style.width = (maxRight - minLeft) + 'px';
+        group.style.height = (maxBottom - minTop) + 'px';
+        group.style.background = 'transparent';
+        group.style.border = '1px dashed rgba(0,0,0,0.2)';
+        group.dataset.group = 'true';
+
+        ensureElementUID(group);
+
+        selectedEls.forEach(el => {
+            const elRect = el.getBoundingClientRect();
+            const offsetLeft = elRect.left - minLeft;
+            const offsetTop = elRect.top - minTop;
+            el.style.left = offsetLeft + 'px';
+            el.style.top = offsetTop + 'px';
+            group.appendChild(el);
+        });
+
+        canvas.appendChild(group);
+        attachElementInteractions(group);
+        clearSelection();
+        selectElement(group, false);
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
+    function ungroupSelection() {
+        const target = selectedElement;
+        if (!target || !target.dataset.group) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const children = Array.from(target.querySelectorAll('.element'));
+        children.forEach(child => {
+            const childRect = child.getBoundingClientRect();
+            const newLeft = childRect.left - canvasRect.left;
+            const newTop = childRect.top - canvasRect.top;
+            child.style.left = newLeft + 'px';
+            child.style.top = newTop + 'px';
+            canvas.appendChild(child);
+            attachElementInteractions(child);
+        });
+        target.remove();
+        clearSelection();
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
     function setSelectedElement(el) {
         if (selectedElement === el) return;
         if (selectedElement) {
@@ -1239,10 +1519,29 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedElement = el;
         if (selectedElement) {
             selectedElement.classList.add('element--selected');
-            updateBgModeLabel();
-        } else {
-            updateBgModeLabel();
         }
+        updateBgModeLabel();
+    }
+
+    function clearSelection() {
+        canvas.querySelectorAll('.element.element--selected').forEach(el => {
+            el.classList.remove('element--selected');
+        });
+        selectedElement = null;
+        updateBgModeLabel();
+    }
+
+    function selectElement(el, additive = false) {
+        if (!additive) {
+            clearSelection();
+        }
+        if (el) {
+            el.classList.add('element--selected');
+            selectedElement = el;
+        } else {
+            selectedElement = null;
+        }
+        updateBgModeLabel();
     }
 
     function updateBgModeLabel() {
@@ -1303,9 +1602,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     inlineToolbar.addEventListener('click', (e) => {
         const btn = e.target.closest('button');
-        if (!btn || !activeEditable) return;
+        if (!btn) return;
         const action = btn.dataset.action;
-        const style = activeEditable.style;
+        if (!activeEditable && action !== 'pin-color') return;
+        const style = activeEditable ? activeEditable.style : null;
         if (action === 'bold') {
             style.fontWeight = style.fontWeight === '700' ? '400' : '700';
         } else if (action === 'italic') {
@@ -1324,8 +1624,23 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (action === 'larger') {
             const current = parseInt(window.getComputedStyle(activeEditable).fontSize || '16', 10);
             style.fontSize = `${current + 2}px`;
+        } else if (action === 'pin-color') {
+            // Pin the current text color of the active editable into swatches
+            if (!activeEditable) return;
+            const currentColor = window.getComputedStyle(activeEditable).color;
+            const swatchContainer = inlineToolbar.querySelector('.color-swatches');
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = currentColor;
+            swatch.title = currentColor;
+            swatch.addEventListener('click', () => {
+                if (!activeEditable) return;
+                activeEditable.style.color = currentColor;
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
+            });
+            swatchContainer.appendChild(swatch);
         }
-        if (typeof saveState === 'function' && canvas) saveState(canvas);
+        if (action !== 'pin-color' && typeof saveState === 'function' && canvas && activeEditable) saveState(canvas);
     });
 
     inlineToolbar.querySelector('select[data-action="preset"]').addEventListener('change', (e) => {
@@ -1337,10 +1652,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    inlineToolbar.querySelector('select[data-action="font-family"]').addEventListener('change', (e) => {
+        if (!activeEditable) return;
+        const value = e.target.value;
+        if (value) {
+            activeEditable.style.fontFamily = value;
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        }
+    });
+
+    inlineToolbar.querySelector('input[data-action="line-height"]').addEventListener('change', (e) => {
+        if (!activeEditable) return;
+        const v = parseFloat(e.target.value);
+        if (!isNaN(v) && v > 0) {
+            activeEditable.style.lineHeight = v.toString();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        }
+    });
+
     function showContextMenu(e) {
         e.preventDefault();
         if (isLocked) return;
-        setSelectedElement(e.target.closest('.element'));
+        const el = e.target.closest('.element');
+        if (el) {
+            if (!el.classList.contains('element--selected')) {
+                selectElement(el, false);
+            } else {
+                selectedElement = el;
+            }
+        }
         contextMenu.style.display = 'block';
         contextMenu.style.left = `${e.clientX}px`;
         contextMenu.style.top = `${e.clientY}px`;
@@ -1349,7 +1689,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         contextMenu.style.display = 'none';
         if (!e.target.closest('.element') && e.target !== contextMenu) {
-            setSelectedElement(null);
+            clearSelection();
         }
     });
 
@@ -1579,6 +1919,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const colorTransitionIntervals = new Map(); // uid -> intervalId
     const gradientAnimIntervals = new Map(); // uid -> intervalId
     const elementAnimIntervals = new Map(); // uid -> intervalId (for scale/move/rotate etc)
+    let reduceMotion = false;
 
     // --- Helper: Get UID for an element ---
     function getElementUID(el) {
@@ -1633,7 +1974,6 @@ document.addEventListener('DOMContentLoaded', () => {
     applyAnimationBtn.addEventListener('click', () => {
         if (selectedElement) {
             const uid = getElementUID(selectedElement);
-            // Clean up any previous animation interval for this element
             if (elementAnimIntervals.has(uid)) {
                 clearInterval(elementAnimIntervals.get(uid));
                 elementAnimIntervals.delete(uid);
@@ -1641,6 +1981,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const type = animationTypeSelect.value;
             const preset = animationPresetSelect.value;
             const duration = parseFloat(animationDurationInput.value) || 2;
+
+            // Always store the animation metadata
+            selectedElement.dataset.elementAnimation = JSON.stringify({ type, preset, duration });
+
+            // Honor reduce-motion: don't start intervals if enabled
+            if (reduceMotion) {
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
+                renderAnimationsPanel();
+                closeAnimationPopup();
+                return;
+            }
+
             let intervalId;
             if (type === 'scale') {
                 let scale = 1, direction = 1;
@@ -1698,11 +2050,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (intervalId) {
                 elementAnimIntervals.set(uid, intervalId);
             }
-            // Store animation info for export/undo/redo
-            selectedElement.dataset.elementAnimation = JSON.stringify({
-                type, preset, duration
-            });
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            renderAnimationsPanel();
         }
         closeAnimationPopup();
     });
@@ -1811,6 +2160,118 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function renderAnimationsPanel() {
+        if (!animationsPanel || !animationsList) return;
+        animationsList.innerHTML = '';
+        const elements = Array.from(canvas.querySelectorAll('.element')).filter(el => el.dataset.elementAnimation);
+        if (!elements.length) {
+            animationsList.textContent = 'No animated elements on this frame.';
+            return;
+        }
+        elements.forEach(el => {
+            const uid = getElementUID(el) || ensureElementUID(el);
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.justifyContent = 'space-between';
+            row.style.marginBottom = '2px';
+            const label = document.createElement('span');
+            const meta = el.dataset.elementAnimation ? JSON.parse(el.dataset.elementAnimation) : {};
+            label.textContent = meta.type || 'anim';
+            const btn = document.createElement('button');
+            const isRunning = elementAnimIntervals.has(uid);
+            btn.textContent = isRunning ? 'Pause' : 'Play';
+            btn.addEventListener('click', () => {
+                toggleElementAnimation(el, uid);
+            });
+            row.appendChild(label);
+            row.appendChild(btn);
+            animationsList.appendChild(row);
+        });
+    }
+
+    function toggleElementAnimation(el, uid) {
+        if (!el || !el.dataset.elementAnimation) return;
+        if (elementAnimIntervals.has(uid)) {
+            clearInterval(elementAnimIntervals.get(uid));
+            elementAnimIntervals.delete(uid);
+            return;
+        }
+        if (reduceMotion) return;
+        try {
+            const { type, duration } = JSON.parse(el.dataset.elementAnimation);
+            let intervalId;
+            if (type === 'scale') {
+                let scale = 1, direction = 1;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(el)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    scale += direction * 0.02;
+                    if (scale > 1.2) direction = -1;
+                    if (scale < 0.8) direction = 1;
+                    el.dataset.scale = scale;
+                    setElementTransform(el, {
+                        scale,
+                        rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined,
+                        translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
+                    });
+                }, 1000 * (parseFloat(duration) || 2) / 40);
+            } else if (type === 'move') {
+                let pos = 0, dir = 1;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(el)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    pos += dir * 2;
+                    if (pos > 40) dir = -1;
+                    if (pos < -40) dir = 1;
+                    el.dataset.translateX = pos;
+                    setElementTransform(el, {
+                        translateX: pos,
+                        scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
+                        rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined
+                    });
+                }, 1000 * (parseFloat(duration) || 2) / 40);
+            } else if (type === 'rotate') {
+                let angle = 0;
+                intervalId = setInterval(() => {
+                    if (!document.body.contains(el)) {
+                        clearInterval(intervalId);
+                        elementAnimIntervals.delete(uid);
+                        return;
+                    }
+                    angle = (angle + 5) % 360;
+                    el.dataset.rotation = angle;
+                    setElementTransform(el, {
+                        rotate: angle,
+                        scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
+                        translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
+                    });
+                }, 1000 * (parseFloat(duration) || 2) / 40);
+            }
+            if (intervalId) elementAnimIntervals.set(uid, intervalId);
+        } finally {
+            renderAnimationsPanel();
+        }
+    }
+
+    if (reduceMotionToggle) {
+        reduceMotionToggle.addEventListener('change', () => {
+            reduceMotion = reduceMotionToggle.checked;
+            if (reduceMotion) {
+                // Stop all element animations when reduce-motion is enabled
+                elementAnimIntervals.forEach((intervalId) => clearInterval(intervalId));
+                elementAnimIntervals.clear();
+            }
+            renderAnimationsPanel();
+        });
+    }
+
     // Call restoreElementAnimations after undo/redo/import/load/initial render
     // Example: after saveState() or after elements are re-created
     // You may need to call restoreElementAnimations() in your undo/redo/load logic
@@ -1858,6 +2319,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Track the current theme index
     let currentThemeIndex = null;
 
+    if (groupBtn) {
+        groupBtn.addEventListener('click', () => {
+            groupSelection();
+        });
+    }
+
+    if (ungroupBtn) {
+        ungroupBtn.addEventListener('click', () => {
+            ungroupSelection();
+        });
+    }
+
     // Setup drag/resize logic
     // Replace startDragging, startResizing with dragResizeManager usage
     // Use setDragged, setOffset, setSelected to update local state
@@ -1871,14 +2344,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // setupUnsplashSearch(searchBtn, searchQueryInput, searchResults, mediaUrlInput);
 
     // --- Theme Selector ---
-    // Add a button to open the theme selector popup
-    const themeBtn = document.createElement('button');
-    themeBtn.id = 'theme-btn';
-    themeBtn.textContent = 'Theme';
-    themeBtn.setAttribute('aria-haspopup', 'dialog');
-    themeBtn.setAttribute('aria-controls', 'theme-popup');
-    themeBtn.style.marginLeft = '8px';
-    toolbar.appendChild(themeBtn);
+    // Use existing Theme button in the View toolbar group, or create if missing
+    let themeBtn = document.getElementById('theme-btn');
+    if (!themeBtn && toolbar) {
+        themeBtn = document.createElement('button');
+        themeBtn.id = 'theme-btn';
+        themeBtn.textContent = 'Theme';
+        themeBtn.setAttribute('aria-haspopup', 'dialog');
+        themeBtn.setAttribute('aria-controls', 'theme-popup');
+        themeBtn.style.marginLeft = '8px';
+        toolbar.appendChild(themeBtn);
+    }
 
     // Create the theme popup (if not present)
     let themePopup = document.getElementById('theme-popup');

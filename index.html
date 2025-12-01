@@ -71,6 +71,7 @@
                 <button id="toggle-sidebar-btn" aria-label="Toggle sidebar" title="Show or hide element sidebar">Sidebar</button>
                 <button id="background-btn" aria-label="Change background" title="Change canvas background color">Background</button>
                 <button id="toggle-grid-btn" aria-label="Toggle grid" title="Toggle grid overlay">Grid</button>
+                <button id="theme-btn" aria-label="Color themes" title="Apply a color theme">Theme</button>
                 <span class="toolbar-divider"></span>
                 <button id="zoom-out-btn" aria-label="Zoom out" title="Zoom out">-</button>
                 <span id="zoom-label" aria-live="polite">100%</span>
@@ -79,6 +80,8 @@
             </div>
             <div class="toolbar-group" aria-label="Selection">
                 <button id="lock-btn" aria-label="Lock selection" title="Lock or unlock element editing">Lock</button>
+                <button id="group-btn" aria-label="Group selection" title="Group selected elements">Group</button>
+                <button id="ungroup-btn" aria-label="Ungroup selection" title="Ungroup selected group">Ungroup</button>
             </div>
             <div class="toolbar-group" aria-label="Playback">
                 <button id="play-mode-btn" aria-label="Play storyboard" title="Enter play/preview mode">Play</button>
@@ -103,6 +106,12 @@
         <button id="toggleBorder" role="menuitem">Toggle Border</button>
         <button id="moveForward" role="menuitem">Move Forward</button>
         <button id="moveBackward" role="menuitem">Move Backward</button>
+        <button id="groupSelection" role="menuitem">Group Selection</button>
+        <button id="ungroupSelection" role="menuitem">Ungroup</button>
+        <button id="alignLeft" role="menuitem">Align Left</button>
+        <button id="alignCenter" role="menuitem">Align Center</button>
+        <button id="alignTop" role="menuitem">Align Top</button>
+        <button id="alignMiddle" role="menuitem">Align Middle</button>
         <button id="deleteElement" role="menuitem">Delete</button>
     </div>
 
@@ -176,6 +185,14 @@
 
     <aside id="widget" class="widget" role="complementary" aria-label="MTR Magic Key badge">
         <a href="https://www.mtrmagickey.com"><img src="https://github.com/mtrmagickey/mocking-board/blob/main/mtrmk_badge.png?raw=true" alt="MTR Magic Key"></a>
+    </aside>
+
+    <aside id="animations-panel" class="animations-panel" aria-label="Animations panel">
+        <header>
+            <span>Animations</span>
+            <label><input type="checkbox" id="reduce-motion-toggle"> Reduce motion</label>
+        </header>
+        <div id="animations-list"></div>
     </aside>
 
     <input type="file" id="file-input" style="display: none;">

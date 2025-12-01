@@ -65,6 +65,32 @@ h2 {
     height: 100%;
     box-sizing: border-box;
 }
+
+.snap-guide {
+    position: absolute;
+    background: rgba(52, 152, 219, 0.6);
+    pointer-events: none;
+    z-index: 9998;
+}
+
+.snap-guide.horizontal {
+    height: 1px;
+    width: 100%;
+}
+
+.snap-guide.vertical {
+    width: 1px;
+    height: 100%;
+}
+
+.marquee-selection {
+    position: absolute;
+    border: 1px dashed #3498db;
+    background: rgba(52, 152, 219, 0.08);
+    pointer-events: none;
+    box-sizing: border-box;
+    z-index: 9999;
+}
 .frame-bar {
     position: absolute;
     bottom: 10px;
@@ -289,6 +315,26 @@ h2 {
     z-index: 10001;
     gap: 4px;
 }
+
+.inline-text-toolbar select,
+.inline-text-toolbar input[type="number"] {
+    font-size: 11px;
+    padding: 2px 4px;
+}
+
+.inline-text-toolbar .color-swatches {
+    display: flex;
+    gap: 4px;
+    margin-left: 4px;
+}
+
+.inline-text-toolbar .color-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.25);
+    cursor: pointer;
+}
 .inline-text-toolbar button,
 .inline-text-toolbar select {
     border: none;
@@ -308,6 +354,50 @@ h2 {
     opacity: 0.1;
     transition: opacity 0.3s;
     z-index: 3;
+}
+
+.animations-panel {
+    position: fixed;
+    right: 8px;
+    bottom: 8px;
+    width: 220px;
+    max-height: 40vh;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 9000;
+}
+
+.animations-panel header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background: #f6f6f6;
+}
+
+.animations-panel header span {
+    font-weight: 600;
+}
+
+.animations-panel header label {
+    font-size: 10px;
+}
+
+#animations-list {
+    padding: 4px 8px;
+    overflow: auto;
+}
+
+#animations-list button {
+    font-size: 10px;
+    margin-left: 4px;
 }
 .widget:hover {
     opacity: 1;
