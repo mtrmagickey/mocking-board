@@ -117,7 +117,7 @@ h2 {
     align-items: center;
     gap: 8px;
     padding: 6px 14px;
-    background: linear-gradient(135deg, rgba(15,23,42,0.9), rgba(245,201,25,0.85));
+    background: rgba(15,23,42,0.9);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     border-radius: 999px;
@@ -276,7 +276,7 @@ h2 {
     display: flex;
     gap: 6px;
     padding: 4px 6px;
-    background: radial-gradient(circle at top left, rgba(245,201,25,0.9), rgba(15,23,42,0.92));
+    background: rgba(15,23,42,0.92);
     border-radius: 999px;
     backdrop-filter: blur(14px) saturate(135%);
     -webkit-backdrop-filter: blur(14px) saturate(135%);
@@ -295,6 +295,7 @@ h2 {
     border: none;
     cursor: pointer;
     font-size: 12px;
+    font-weight: 600;
 }
 .toolbar button:hover {
     opacity: 1;
@@ -324,6 +325,7 @@ h2 {
     border: none;
     text-align: left;
     cursor: pointer;
+    font-weight: 600;
 }
 .context-menu button:hover {
     background-color: #f0f0f0;
@@ -429,6 +431,7 @@ h2 {
     color: white;
     border: none;
     cursor: pointer;
+    font-weight: 600;
 }
 .popup button:hover {
     background-color: #2980b9;

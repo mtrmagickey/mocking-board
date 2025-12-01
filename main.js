@@ -1684,21 +1684,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Seed inline text toolbar with default brand color swatches
-    (function seedBrandSwatches() {
+    // Seed inline text toolbar with a few light/yellow swatches
+    (function seedInlineSwatches() {
         const swatchContainer = inlineToolbar.querySelector('.color-swatches');
         if (!swatchContainer) return;
-        const brandSwatches = [
-            { name: 'Bright Amber', hex: BASE_PALETTE.brightAmber },
-            { name: 'Black', hex: BASE_PALETTE.black },
-            { name: 'Grey Olive', hex: BASE_PALETTE.greyOlive },
-            { name: 'Old Gold', hex: BASE_PALETTE.oldGold },
-            { name: 'Olive Bark', hex: BASE_PALETTE.oliveBark }
+        const swatches = [
+            { name: 'Amber', hex: '#F5C919' },
+            { name: 'Soft Amber', hex: '#FFEFA8' },
+            { name: 'Warm White', hex: '#FFF9E5' },
+            { name: 'Black', hex: '#111111' }
         ];
-        brandSwatches.forEach(({ name, hex }) => {
+        swatches.forEach(({ name, hex }) => {
             const swatch = document.createElement('div');
             swatch.className = 'color-swatch';
-            swatch.style.backgroundColor = hex.startsWith('#') ? hex : `#${hex}`;
+            swatch.style.backgroundColor = hex;
             swatch.title = name;
             swatch.addEventListener('click', () => {
                 if (!activeEditable) return;
@@ -1750,8 +1749,8 @@ document.addEventListener('DOMContentLoaded', () => {
         closeColorPopup();
     });
 
-    // Seed main color popup with default brand swatches if a container exists
-    (function seedBrandSwatchesInColorPopup() {
+    // Seed main color popup with a few quick swatches if a container exists
+    (function seedPopupSwatches() {
         if (!colorPopup) return;
         const swatchContainerId = 'brand-color-swatches';
         let swatchContainer = colorPopup.querySelector('#' + swatchContainerId);
@@ -1763,21 +1762,20 @@ document.addEventListener('DOMContentLoaded', () => {
             swatchContainer.style.gap = '4px';
             swatchContainer.style.marginTop = '8px';
             const label = document.createElement('div');
-            label.textContent = 'Brand colors';
+            label.textContent = 'Quick colors';
             label.style.fontSize = '11px';
             label.style.opacity = '0.7';
             colorPopup.appendChild(label);
             colorPopup.appendChild(swatchContainer);
         }
 
-        const brandSwatches = [
-            { name: 'Bright Amber', hex: BASE_PALETTE.brightAmber },
-            { name: 'Black', hex: BASE_PALETTE.black },
-            { name: 'Grey Olive', hex: BASE_PALETTE.greyOlive },
-            { name: 'Old Gold', hex: BASE_PALETTE.oldGold },
-            { name: 'Olive Bark', hex: BASE_PALETTE.oliveBark }
+        const swatches = [
+            { name: 'Amber', hex: '#F5C919' },
+            { name: 'Soft Amber', hex: '#FFEFA8' },
+            { name: 'Warm White', hex: '#FFF9E5' },
+            { name: 'White', hex: '#FFFFFF' }
         ];
-        brandSwatches.forEach(({ name, hex }) => {
+        swatches.forEach(({ name, hex }) => {
             const swatch = document.createElement('button');
             swatch.type = 'button';
             swatch.style.width = '18px';
@@ -1786,30 +1784,12 @@ document.addEventListener('DOMContentLoaded', () => {
             swatch.style.border = '1px solid rgba(0,0,0,0.2)';
             swatch.style.padding = '0';
             swatch.style.cursor = 'pointer';
-            swatch.style.backgroundColor = hex.startsWith('#') ? hex : `#${hex}`;
+            swatch.style.backgroundColor = hex;
             swatch.title = name;
             swatch.addEventListener('click', () => {
                 if (!selectedElement) return;
                 const color = swatch.style.backgroundColor;
                 changeElementColor(selectedElement, color);
-                // also sync the hex input if possible
-                try {
-                    const tmp = document.createElement('div');
-                    tmp.style.color = color;
-                    document.body.appendChild(tmp);
-                    const computed = getComputedStyle(tmp).color;
-                    document.body.removeChild(tmp);
-                    const match = computed.match(/rgba?\((\d+), (\d+), (\d+)/);
-                    if (match) {
-                        const r = parseInt(match[1], 10);
-                        const g = parseInt(match[2], 10);
-                        const b = parseInt(match[3], 10);
-                        const hexVal = rgbToHex(r, g, b);
-                        if (hexInput) hexInput.value = hexVal;
-                    }
-                } catch (_) {
-                    // ignore color parsing issues
-                }
                 if (typeof saveState === 'function' && canvas) saveState(canvas);
             });
             swatchContainer.appendChild(swatch);
