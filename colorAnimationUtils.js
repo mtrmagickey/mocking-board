@@ -15,7 +15,14 @@ export function rgbToHex(rgb) {
 }
 
 export function getRandomColor() {
-    const colors = ['#f9dea2', '#cc0000', '#ffffff', '#8c8c8c', '#FAC800', '#6F7D1C', '#2b2622', '#b5a643', '#008473', '#990000', 'transparent'];
+    const colors = [
+        '#F5C919', // Bright Amber
+        '#000004', // Black
+        '#8D8C8C', // Grey Olive
+        '#D1BF4B', // Old Gold
+        '#6D5608', // Olive Bark
+        'transparent'
+    ];
     return colors[Math.floor(Math.random() * colors.length)];
 }
 

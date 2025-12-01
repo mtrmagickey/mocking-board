@@ -1,9 +1,14 @@
 body, html {
     margin: 0;
     padding: 0;
-    font-family: 'Roboto', sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     height: 100%;
     overflow: hidden;
+    background:
+        radial-gradient(circle at 0% 0%, rgba(245,201,25,0.45), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(209,191,75,0.6), transparent 60%),
+        linear-gradient(135deg, #f4f4f2 0%, #fdfcf8 100%);
+    color: #111827;
 }
 h2 {
     font-family: 'Old Standard TT', serif;
@@ -18,6 +23,14 @@ h2 {
     padding: 0;
     overflow-y: auto;
     transition: width 0.3s, opacity 0.3s;
+    background: radial-gradient(circle at top left, color-mix(in srgb, var(--mb-amber) 30%, transparent), rgba(255,255,255,0.88));
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    border-radius: 18px 0 0 18px;
+    border: 1px solid color-mix(in srgb, var(--mb-amber) 40%, transparent);
+    box-shadow:
+        0 18px 45px rgba(15, 23, 42, 0.18),
+        0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 .sidebar.collapsed {
     width: 0;
@@ -57,13 +70,17 @@ h2 {
 }
 .canvas {
     position: relative;
-    background-color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.96);
     overflow: auto;
     transition: background-color 0.3s;
     z-index: 1;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
+    border-radius: 22px;
+    box-shadow:
+        0 22px 50px color-mix(in srgb, var(--mb-black) 45%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--mb-amber) 45%, transparent);
 }
 
 .snap-guide {
@@ -99,10 +116,15 @@ h2 {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 8px;
-    background: rgba(255,255,255,0.9);
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    padding: 6px 14px;
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--mb-black) 92%, transparent),
+        color-mix(in srgb, var(--mb-olive-bark) 90%, transparent)
+    );
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-radius: 999px;
+    box-shadow: 0 22px 45px rgba(15,23,42,0.45);
     z-index: 4;
     font-size: 12px;
 }
@@ -179,7 +201,7 @@ h2 {
 }
 .element {
     position: absolute;
-    background-color: transparent;
+    background-color: rgba(255, 255, 255, 0.95);
     border: none;
     padding: 10px;
     cursor: move;
@@ -188,13 +210,26 @@ h2 {
     min-height: 50px;
     z-index: 2;
     box-sizing: border-box;
+    border-radius: 14px;
+    box-shadow:
+        0 12px 28px color-mix(in srgb, var(--mb-black) 36%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--mb-old-gold) 55%, transparent);
+    transition:
+        box-shadow 0.18s ease,
+        transform 0.18s ease,
+        background 0.18s ease;
 }
 .element.element--selected {
-    outline: 2px solid #3498db;
-    box-shadow: 0 0 0 1px rgba(52,152,219,0.4), 0 4px 12px rgba(0,0,0,0.15);
+    outline: 2px solid color-mix(in srgb, var(--mb-amber) 98%, transparent);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.95),
+        0 0 0 6px color-mix(in srgb, var(--mb-amber) 32%, transparent);
 }
 .element:not(.element--selected):hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+    box-shadow:
+        0 16px 40px color-mix(in srgb, var(--mb-black) 32%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--mb-old-gold) 45%, transparent);
 }
 .element.locked .resize-handle, .element.locked .text-format-toolbar {
     display: none;
@@ -215,14 +250,21 @@ h2 {
     width: 100%;
     padding: 10px;
     margin-bottom: 10px;
-    background-color: #3498db;
-    color: white;
-    border: none;
+    background: linear-gradient(145deg, #f9fafb, #e5ecff);
+    color: #111827;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--mb-old-gold) 70%, transparent);
     cursor: pointer;
-    transition: background-color 0.3s;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+    transition:
+        transform 0.1s ease,
+        box-shadow 0.15s ease,
+        background 0.15s ease;
 }
 .element-button:hover {
-    background-color: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.25);
+    background: linear-gradient(145deg, #ffffff, var(--mb-amber));
 }
 .toolbar {
     position: absolute;
@@ -237,8 +279,14 @@ h2 {
     display: flex;
     gap: 6px;
     padding: 4px 6px;
-    background: rgba(52, 73, 94, 0.85);
-    border-radius: 6px;
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--mb-black) 94%, transparent),
+        color-mix(in srgb, var(--mb-olive-bark) 92%, transparent)
+    );
+    border-radius: 999px;
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.38);
 }
 .toolbar-divider {
     width: 1px;
@@ -247,7 +295,7 @@ h2 {
     margin: 0 4px;
 }
 .toolbar button {
-    padding: 4px 8px;
+    padding: 4px 10px;
     background-color: transparent;
     color: white;
     border: none;
@@ -351,7 +399,7 @@ h2 {
     position: absolute;
     bottom: 10px;
     right: 10px;
-    opacity: 0.1;
+    opacity: 0.18;
     transition: opacity 0.3s;
     z-index: 3;
 }
@@ -469,7 +517,9 @@ h2 {
     height: 100%;
     pointer-events: none;
     background-size: 20px 20px;
-    background-image: linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px);
+    background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.18) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.18) 1px, transparent 1px);
     display: none;  /* Initially hidden */
 }
 @keyframes move1 {

@@ -6,6 +6,15 @@ import { startDragging, startResizing } from './dragResizeManager.js';
 import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Global palette (Bright Amber / Black / Grey Olive / Old Gold / Olive Bark) ---
+    const BASE_PALETTE = {
+        brightAmber: '#F5C919',
+        black: '#000004',
+        greyOlive: '#8D8C8C',
+        oldGold: '#D1BF4B',
+        oliveBark: '#6D5608'
+    };
+
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
     const loadBtn = document.getElementById('load-btn');
@@ -196,6 +205,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlayMode = false;
     let playModeIntervalId = null;
     let zoomLevel = 1;
+
+    function applyAppPaletteToCSS() {
+        const root = document.documentElement;
+        if (!root) return;
+        root.style.setProperty('--mb-amber', BASE_PALETTE.brightAmber);
+        root.style.setProperty('--mb-black', BASE_PALETTE.black);
+        root.style.setProperty('--mb-grey-olive', BASE_PALETTE.greyOlive);
+        root.style.setProperty('--mb-old-gold', BASE_PALETTE.oldGold);
+        root.style.setProperty('--mb-olive-bark', BASE_PALETTE.oliveBark);
+    }
 
     function updateFrameLabel() {
         if (frameLabel) {
@@ -748,6 +767,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize first empty frame
     frames[0] = snapshotCurrentCanvas();
     updateFrameLabel();
+
+    // Apply global palette CSS variables
+    applyAppPaletteToCSS();
 
     // Trigger onboarding for first-time users
     startOnboardingIfNeeded();
@@ -1670,6 +1692,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Seed inline text toolbar with default brand color swatches
+    (function seedBrandSwatches() {
+        const swatchContainer = inlineToolbar.querySelector('.color-swatches');
+        if (!swatchContainer) return;
+        const brandSwatches = [
+            { name: 'Bright Amber', hex: BASE_PALETTE.brightAmber },
+            { name: 'Black', hex: BASE_PALETTE.black },
+            { name: 'Grey Olive', hex: BASE_PALETTE.greyOlive },
+            { name: 'Old Gold', hex: BASE_PALETTE.oldGold },
+            { name: 'Olive Bark', hex: BASE_PALETTE.oliveBark }
+        ];
+        brandSwatches.forEach(({ name, hex }) => {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = hex.startsWith('#') ? hex : `#${hex}`;
+            swatch.title = name;
+            swatch.addEventListener('click', () => {
+                if (!activeEditable) return;
+                activeEditable.style.color = swatch.style.backgroundColor;
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
+            });
+            swatchContainer.appendChild(swatch);
+        });
+    })();
+
     function showContextMenu(e) {
         e.preventDefault();
         if (isLocked) return;
@@ -1710,6 +1757,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         closeColorPopup();
     });
+
+    // Seed main color popup with default brand swatches if a container exists
+    (function seedBrandSwatchesInColorPopup() {
+        if (!colorPopup) return;
+        const swatchContainerId = 'brand-color-swatches';
+        let swatchContainer = colorPopup.querySelector('#' + swatchContainerId);
+        if (!swatchContainer) {
+            swatchContainer = document.createElement('div');
+            swatchContainer.id = swatchContainerId;
+            swatchContainer.style.display = 'flex';
+            swatchContainer.style.flexWrap = 'wrap';
+            swatchContainer.style.gap = '4px';
+            swatchContainer.style.marginTop = '8px';
+            const label = document.createElement('div');
+            label.textContent = 'Brand colors';
+            label.style.fontSize = '11px';
+            label.style.opacity = '0.7';
+            colorPopup.appendChild(label);
+            colorPopup.appendChild(swatchContainer);
+        }
+
+        const brandSwatches = [
+            { name: 'Bright Amber', hex: BASE_PALETTE.brightAmber },
+            { name: 'Black', hex: BASE_PALETTE.black },
+            { name: 'Grey Olive', hex: BASE_PALETTE.greyOlive },
+            { name: 'Old Gold', hex: BASE_PALETTE.oldGold },
+            { name: 'Olive Bark', hex: BASE_PALETTE.oliveBark }
+        ];
+        brandSwatches.forEach(({ name, hex }) => {
+            const swatch = document.createElement('button');
+            swatch.type = 'button';
+            swatch.style.width = '18px';
+            swatch.style.height = '18px';
+            swatch.style.borderRadius = '4px';
+            swatch.style.border = '1px solid rgba(0,0,0,0.2)';
+            swatch.style.padding = '0';
+            swatch.style.cursor = 'pointer';
+            swatch.style.backgroundColor = hex.startsWith('#') ? hex : `#${hex}`;
+            swatch.title = name;
+            swatch.addEventListener('click', () => {
+                if (!selectedElement) return;
+                const color = swatch.style.backgroundColor;
+                changeElementColor(selectedElement, color);
+                // also sync the hex input if possible
+                try {
+                    const tmp = document.createElement('div');
+                    tmp.style.color = color;
+                    document.body.appendChild(tmp);
+                    const computed = getComputedStyle(tmp).color;
+                    document.body.removeChild(tmp);
+                    const match = computed.match(/rgba?\((\d+), (\d+), (\d+)/);
+                    if (match) {
+                        const r = parseInt(match[1], 10);
+                        const g = parseInt(match[2], 10);
+                        const b = parseInt(match[3], 10);
+                        const hexVal = rgbToHex(r, g, b);
+                        if (hexInput) hexInput.value = hexVal;
+                    }
+                } catch (_) {
+                    // ignore color parsing issues
+                }
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
+            });
+            swatchContainer.appendChild(swatch);
+        });
+    })();
 
     function changeElementColor(element, color) {
         const svg = element.querySelector('svg');
