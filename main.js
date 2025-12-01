@@ -2277,14 +2277,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function closeColorPopup() { closePopup(colorPopup); }
     function openColorTransitionPopup() {
-        startColorInput.value = getRandomColor();
-        endColorInput.value = getRandomColor();
+        startColorInput.value = '#F5C919';
+        endColorInput.value = '#FFF9E5';
         openPopup(colorTransitionPopup);
     }
     function closeColorTransitionPopup() { closePopup(colorTransitionPopup); }
     function openColorGradientPopup() {
-        startGradientColorInput.value = getRandomColor();
-        endGradientColorInput.value = getRandomColor();
+        startGradientColorInput.value = '#F5C919';
+        endGradientColorInput.value = '#FFF9E5';
         openPopup(colorGradientPopup);
     }
     function closeColorGradientPopup() { closePopup(colorGradientPopup); }
