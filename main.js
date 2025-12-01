@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadBtn = document.getElementById('load-btn');
     const clearBtn = document.getElementById('clear-btn');
     const exportBtn = document.getElementById('export-btn');
+    const templatesBtn = document.getElementById('templates-btn');
     const fileInput = document.getElementById('file-input');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
     const lockBtn = document.getElementById('lock-btn');
@@ -29,12 +30,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const frameNextBtn = document.getElementById('frame-next-btn');
     const frameAddBtn = document.getElementById('frame-add-btn');
     const frameLabel = document.getElementById('frame-label');
+    const frameDurationInput = document.getElementById('frame-duration');
     const saveComponentBtn = document.getElementById('save-component-btn');
     const componentsList = document.getElementById('components-list');
+    const playModeBtn = document.getElementById('play-mode-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-btn');
+    const zoomInBtn = document.getElementById('zoom-in-btn');
+    const zoomFitBtn = document.getElementById('zoom-fit-btn');
+    const zoomLabel = document.getElementById('zoom-label');
+
     const fontColorPicker = document.createElement('input');
     fontColorPicker.type = 'color';
     fontColorPicker.style.display = 'none';
     document.body.appendChild(fontColorPicker);
+
+    // Onboarding elements
+    const onboardingOverlay = document.getElementById('onboarding-overlay');
+    const onboardingBody = document.getElementById('onboarding-body');
+    const onboardingStepIndicator = document.getElementById('onboarding-step-indicator');
+    const onboardingSkipBtn = document.getElementById('onboarding-skip');
+    const onboardingNextBtn = document.getElementById('onboarding-next');
+
+    // Background mode indicator (color / gradient / none)
+    const bgModeLabel = document.createElement('span');
+    bgModeLabel.id = 'bg-mode-label';
+    bgModeLabel.style.marginLeft = '12px';
+    bgModeLabel.style.fontSize = '11px';
+    bgModeLabel.style.opacity = '0.7';
+    bgModeLabel.textContent = '';
+    if (toolbar) toolbar.appendChild(bgModeLabel);
 
     const animationPopup = document.getElementById('animation-popup');
     const animationTypeSelect = document.getElementById('animation-type');
@@ -146,12 +170,447 @@ document.addEventListener('DOMContentLoaded', () => {
     let frames = [];
     let currentFrameIndex = 0;
     let components = [];
+    let savedProjectThemeIndex = null;
+    let isPlayMode = false;
+    let playModeIntervalId = null;
+    let zoomLevel = 1;
 
     function updateFrameLabel() {
         if (frameLabel) {
             frameLabel.textContent = `Frame ${currentFrameIndex + 1}`;
         }
+        if (frameDurationInput && frames[currentFrameIndex]) {
+            const dur = frames[currentFrameIndex].duration || 3;
+            frameDurationInput.value = dur;
+        }
     }
+
+    function applyZoom(level) {
+        zoomLevel = Math.min(3, Math.max(0.25, level));
+        const inner = canvas;
+        inner.style.transformOrigin = 'top left';
+        inner.style.transform = `scale(${zoomLevel})`;
+        if (zoomLabel) zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+
+    // --- Onboarding tour logic ---
+    const ONBOARDING_KEY = 'mockingBoard_seenOnboarding_v1';
+    const onboardingSteps = [
+        {
+            title: 'Welcome to Mocking Board',
+            body: 'Use the sidebar on the left to add text, shapes, media, and more to the canvas. Drag things around to quickly mock ideas.',
+        },
+        {
+            title: 'Canvas and Frames',
+            body: 'The central canvas is your stage. Use the frame bar at the bottom to add frames and build multi-step storyboards.',
+        },
+        {
+            title: 'Editing and Animation',
+            body: 'Right-click any element for options like color, gradient, motion, and media. Use the inline text toolbar to style headings and body copy.',
+        },
+        {
+            title: 'Components and Undo',
+            body: 'Save frequently used groups as components from the sidebar, and lean on Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) while experimenting.',
+        }
+    ];
+    let onboardingIndex = 0;
+
+    function renderOnboardingStep() {
+        if (!onboardingOverlay || !onboardingBody || !onboardingStepIndicator) return;
+        const step = onboardingSteps[onboardingIndex];
+        onboardingOverlay.style.display = 'block';
+        onboardingBody.textContent = step.body;
+        const titleEl = document.getElementById('onboarding-title');
+        if (titleEl) titleEl.textContent = step.title;
+        onboardingStepIndicator.textContent = `Step ${onboardingIndex + 1} of ${onboardingSteps.length}`;
+        onboardingNextBtn.textContent = onboardingIndex === onboardingSteps.length - 1 ? 'Done' : 'Next';
+    }
+
+    function startOnboardingIfNeeded() {
+        try {
+            if (window.localStorage && localStorage.getItem(ONBOARDING_KEY)) return;
+        } catch (e) {
+            // Ignore storage errors, just show once per session
+        }
+        onboardingIndex = 0;
+        renderOnboardingStep();
+    }
+
+    function finishOnboarding() {
+        if (onboardingOverlay) onboardingOverlay.style.display = 'none';
+        try {
+            if (window.localStorage) localStorage.setItem(ONBOARDING_KEY, '1');
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    if (onboardingSkipBtn) {
+        onboardingSkipBtn.addEventListener('click', () => {
+            finishOnboarding();
+        });
+    }
+    if (onboardingNextBtn) {
+        onboardingNextBtn.addEventListener('click', () => {
+            onboardingIndex = Math.min(onboardingIndex + 1, onboardingSteps.length - 1);
+            if (onboardingIndex === onboardingSteps.length - 1 && onboardingNextBtn.textContent === 'Done') {
+                finishOnboarding();
+            } else if (onboardingIndex === onboardingSteps.length - 1) {
+                onboardingNextBtn.textContent = 'Done';
+                renderOnboardingStep();
+            } else {
+                renderOnboardingStep();
+            }
+        });
+    }
+
+    // --- Built-in templates ---
+    const builtinTemplates = {
+        filmStoryboard: {
+            name: 'Film Storyboard',
+            frames: 4,
+            build(frameIndex) {
+                const elements = [];
+                const frameWidth = 800;
+                const frameHeight = 450;
+                const padding = 40;
+                const shotWidth = (frameWidth - padding * 2);
+                const shotHeight = 240;
+                const yOffset = 40;
+                const baseTop = yOffset;
+                const baseLeft = padding;
+                // Shot frame
+                elements.push({
+                    type: 'rectangle',
+                    left: baseLeft + 'px',
+                    top: baseTop + 'px',
+                    width: shotWidth + 'px',
+                    height: shotHeight + 'px',
+                    backgroundColor: '#111',
+                    color: '#ffffff',
+                    fontSize: '14px',
+                    fontFamily: 'Roboto, sans-serif',
+                    zIndex: 1,
+                    border: '1px solid #555',
+                    borderColor: '#555',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Shot image or frame here</div>',
+                    dataset: { type: 'rectangle' }
+                });
+                // Header
+                elements.push({
+                    type: 'header',
+                    left: padding + 'px',
+                    top: baseTop + shotHeight + 20 + 'px',
+                    width: (shotWidth / 2 - 10) + 'px',
+                    height: '40px',
+                    backgroundColor: 'transparent',
+                    color: '#111',
+                    fontSize: '20px',
+                    fontFamily: 'Old Standard TT, serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Scene ' + (frameIndex + 1) + '</div>',
+                    dataset: { type: 'header' }
+                });
+                // Description
+                elements.push({
+                    type: 'paragraph',
+                    left: padding + 'px',
+                    top: baseTop + shotHeight + 70 + 'px',
+                    width: (shotWidth / 2 - 10) + 'px',
+                    height: '80px',
+                    backgroundColor: 'transparent',
+                    color: '#333',
+                    fontSize: '14px',
+                    fontFamily: 'Roboto, sans-serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Describe action, dialogue, and camera notes.</div>',
+                    dataset: { type: 'paragraph' }
+                });
+                // Timing / notes
+                elements.push({
+                    type: 'paragraph',
+                    left: padding + shotWidth / 2 + 10 + 'px',
+                    top: baseTop + shotHeight + 20 + 'px',
+                    width: (shotWidth / 2 - 10) + 'px',
+                    height: '130px',
+                    backgroundColor: 'transparent',
+                    color: '#333',
+                    fontSize: '13px',
+                    fontFamily: 'Roboto, sans-serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Timing, audio cues, transitions…</div>',
+                    dataset: { type: 'paragraph' }
+                });
+                return {
+                    elements,
+                    canvas: {
+                        background: '#f5f5f5',
+                        width: frameWidth + 'px',
+                        height: frameHeight + 'px'
+                    }
+                };
+            }
+        },
+        eventWelcome: {
+            name: 'Event Welcome Signboard',
+            frames: 1,
+            build() {
+                const elements = [];
+                const width = 900;
+                const height = 500;
+                elements.push({
+                    type: 'header',
+                    left: '80px',
+                    top: '80px',
+                    width: '740px',
+                    height: '80px',
+                    backgroundColor: 'transparent',
+                    color: '#111',
+                    fontSize: '40px',
+                    fontFamily: 'Old Standard TT, serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Welcome to [Event Name]</div>',
+                    dataset: { type: 'header' }
+                });
+                elements.push({
+                    type: 'paragraph',
+                    left: '80px',
+                    top: '180px',
+                    width: '500px',
+                    height: '120px',
+                    backgroundColor: 'transparent',
+                    color: '#333',
+                    fontSize: '18px',
+                    fontFamily: 'Roboto, sans-serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Add date, time, and a short friendly message.</div>',
+                    dataset: { type: 'paragraph' }
+                });
+                elements.push({
+                    type: 'rectangle',
+                    left: '80px',
+                    top: '320px',
+                    width: '300px',
+                    height: '80px',
+                    backgroundColor: '#2c3e50',
+                    color: '#ffffff',
+                    fontSize: '20px',
+                    fontFamily: 'Roboto, sans-serif',
+                    zIndex: 1,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true" style="text-align:center;line-height:80px;">Start Here</div>',
+                    dataset: { type: 'rectangle' }
+                });
+                return {
+                    elements,
+                    canvas: {
+                        background: '#f9dea2',
+                        width: width + 'px',
+                        height: height + 'px'
+                    }
+                };
+            }
+        },
+        groupPrototyping: {
+            name: 'Group Prototyping',
+            frames: 1,
+            build() {
+                const elements = [];
+                const width = 1000;
+                const height = 600;
+                const cols = 3;
+                const cardWidth = 260;
+                const cardHeight = 220;
+                const padding = 40;
+                for (let i = 0; i < cols; i++) {
+                    const left = padding + i * (cardWidth + 30);
+                    elements.push({
+                        type: 'rectangle',
+                        left: left + 'px',
+                        top: '120px',
+                        width: cardWidth + 'px',
+                        height: cardHeight + 'px',
+                        backgroundColor: '#ffffff',
+                        color: '#111',
+                        fontSize: '14px',
+                        fontFamily: 'Roboto, sans-serif',
+                        zIndex: 1,
+                        border: '1px solid #ddd',
+                        borderColor: '#ddd',
+                        rotation: 0,
+                        innerHTML: '<div class="editable" contenteditable="true">Team ' + (i + 1) + ' concept</div>',
+                        dataset: { type: 'rectangle' }
+                    });
+                }
+                elements.push({
+                    type: 'header',
+                    left: '60px',
+                    top: '40px',
+                    width: '600px',
+                    height: '60px',
+                    backgroundColor: 'transparent',
+                    color: '#111',
+                    fontSize: '32px',
+                    fontFamily: 'Old Standard TT, serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Group Prototyping Board</div>',
+                    dataset: { type: 'header' }
+                });
+                return {
+                    elements,
+                    canvas: {
+                        background: '#e2f0cb',
+                        width: width + 'px',
+                        height: height + 'px'
+                    }
+                };
+            }
+        },
+        designThinking: {
+            name: 'Design Thinking',
+            frames: 1,
+            build() {
+                const elements = [];
+                const width = 1100;
+                const height = 600;
+                const stages = ['Empathize', 'Define', 'Ideate', 'Prototype', 'Test'];
+                const colors = ['#ffd6e0', '#e2f0cb', '#b5ead7', '#c7ceea', '#ffdac1'];
+                const cardWidth = 190;
+                const cardHeight = 260;
+                const padding = 40;
+                stages.forEach((stage, i) => {
+                    const left = padding + i * (cardWidth + 15);
+                    elements.push({
+                        type: 'rectangle',
+                        left: left + 'px',
+                        top: '120px',
+                        width: cardWidth + 'px',
+                        height: cardHeight + 'px',
+                        backgroundColor: colors[i % colors.length],
+                        color: '#111',
+                        fontSize: '16px',
+                        fontFamily: 'Roboto, sans-serif',
+                        zIndex: 1,
+                        border: '1px solid #ccc',
+                        borderColor: '#ccc',
+                        rotation: 0,
+                        innerHTML: '<div class="editable" contenteditable="true"><strong>' + stage + '</strong><br/><br/>Notes, insights, and ideas…</div>',
+                        dataset: { type: 'rectangle' }
+                    });
+                });
+                elements.push({
+                    type: 'header',
+                    left: '60px',
+                    top: '40px',
+                    width: '700px',
+                    height: '60px',
+                    backgroundColor: 'transparent',
+                    color: '#111',
+                    fontSize: '32px',
+                    fontFamily: 'Old Standard TT, serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Design Thinking Journey</div>',
+                    dataset: { type: 'header' }
+                });
+                return {
+                    elements,
+                    canvas: {
+                        background: '#ffffff',
+                        width: width + 'px',
+                        height: height + 'px'
+                    }
+                };
+            }
+        },
+        classroomCollab: {
+            name: 'Classroom Collaboration',
+            frames: 1,
+            build() {
+                const elements = [];
+                const width = 1000;
+                const height = 600;
+                const cols = 2;
+                const rows = 2;
+                const cardWidth = 400;
+                const cardHeight = 200;
+                const paddingX = 80;
+                const paddingY = 120;
+                let team = 1;
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const left = paddingX + c * (cardWidth + 40);
+                        const top = paddingY + r * (cardHeight + 40);
+                        elements.push({
+                            type: 'rectangle',
+                            left: left + 'px',
+                            top: top + 'px',
+                            width: cardWidth + 'px',
+                            height: cardHeight + 'px',
+                            backgroundColor: '#ffffff',
+                            color: '#111',
+                            fontSize: '14px',
+                            fontFamily: 'Roboto, sans-serif',
+                            zIndex: 1,
+                            border: '1px dashed #bbb',
+                            borderColor: '#bbb',
+                            rotation: 0,
+                            innerHTML: '<div class="editable" contenteditable="true">Group ' + (team++) + ' space</div>',
+                            dataset: { type: 'rectangle' }
+                        });
+                    }
+                }
+                elements.push({
+                    type: 'header',
+                    left: '60px',
+                    top: '40px',
+                    width: '700px',
+                    height: '60px',
+                    backgroundColor: 'transparent',
+                    color: '#111',
+                    fontSize: '32px',
+                    fontFamily: 'Old Standard TT, serif',
+                    zIndex: 2,
+                    border: 'none',
+                    borderColor: 'transparent',
+                    rotation: 0,
+                    innerHTML: '<div class="editable" contenteditable="true">Classroom Collaboration Board</div>',
+                    dataset: { type: 'header' }
+                });
+                return {
+                    elements,
+                    canvas: {
+                        background: '#c7ceea',
+                        width: width + 'px',
+                        height: height + 'px'
+                    }
+                };
+            }
+        }
+    };
 
     function snapshotCurrentCanvas() {
         const elements = Array.from(canvas.querySelectorAll('.element')).map(el => ({
@@ -177,7 +636,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 background: canvas.style.background,
                 width: canvas.style.width,
                 height: canvas.style.height,
-            }
+            },
+            duration: (frames[currentFrameIndex] && frames[currentFrameIndex].duration) || 3
         };
     }
 
@@ -209,6 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     element.dataset[key] = elData.dataset[key];
                 });
             }
+            ensureElementUID(element);
             if (elData.rotation) {
                 element.style.transform = `rotate(${elData.rotation}deg)`;
             }
@@ -266,6 +727,28 @@ document.addEventListener('DOMContentLoaded', () => {
     frames[0] = snapshotCurrentCanvas();
     updateFrameLabel();
 
+    // Trigger onboarding for first-time users
+    startOnboardingIfNeeded();
+
+    // --- Zoom controls ---
+    if (zoomOutBtn && zoomInBtn && zoomFitBtn) {
+        applyZoom(1);
+        zoomOutBtn.addEventListener('click', () => {
+            applyZoom(zoomLevel - 0.1);
+        });
+        zoomInBtn.addEventListener('click', () => {
+            applyZoom(zoomLevel + 0.1);
+        });
+        zoomFitBtn.addEventListener('click', () => {
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const contentRect = canvas.getBoundingClientRect();
+            const scaleX = containerRect.width / contentRect.width;
+            const scaleY = containerRect.height / contentRect.height;
+            const target = Math.min(scaleX, scaleY, 1.5);
+            applyZoom(target);
+        });
+    }
+
     if (framePrevBtn) {
         framePrevBtn.addEventListener('click', () => {
             frames[currentFrameIndex] = snapshotCurrentCanvas();
@@ -290,6 +773,48 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFrameIndex = frames.length - 1;
             loadFrame(currentFrameIndex);
         });
+    }
+
+    if (frameDurationInput) {
+        frameDurationInput.addEventListener('change', () => {
+            const val = parseInt(frameDurationInput.value, 10);
+            const clamped = isFinite(val) ? Math.max(1, Math.min(60, val)) : 3;
+            frameDurationInput.value = clamped;
+            if (frames[currentFrameIndex]) {
+                frames[currentFrameIndex].duration = clamped;
+            }
+        });
+    }
+
+    function enterPlayMode() {
+        if (isPlayMode || !frames.length) return;
+        isPlayMode = true;
+        canvasContainer.classList.add('play-mode');
+        if (playModeBtn) playModeBtn.textContent = 'Stop';
+        let index = currentFrameIndex;
+        const scheduleNext = () => {
+            if (!isPlayMode || !frames.length) return;
+            const frame = frames[index] || {};
+            const dur = frame.duration || 3;
+            playModeIntervalId = setTimeout(() => {
+                if (!isPlayMode) return;
+                index = (index + 1) % frames.length;
+                currentFrameIndex = index;
+                loadFrame(currentFrameIndex);
+                scheduleNext();
+            }, dur * 1000);
+        };
+        scheduleNext();
+    }
+
+    function exitPlayMode() {
+        isPlayMode = false;
+        canvasContainer.classList.remove('play-mode');
+        if (playModeBtn) playModeBtn.textContent = 'Play';
+        if (playModeIntervalId) {
+            clearTimeout(playModeIntervalId);
+            playModeIntervalId = null;
+        }
     }
 
     function getSelectedElementsSnapshot() {
@@ -346,6 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             element.dataset[key] = elData.dataset[key];
                         });
                     }
+                    ensureElementUID(element);
                     if (elData.rotation) {
                         element.style.transform = `rotate(${elData.rotation}deg)`;
                     }
@@ -667,7 +1193,27 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedElement = el;
         if (selectedElement) {
             selectedElement.classList.add('element--selected');
+            updateBgModeLabel();
+        } else {
+            updateBgModeLabel();
         }
+    }
+
+    function updateBgModeLabel() {
+        if (!bgModeLabel) return;
+        if (!selectedElement) {
+            bgModeLabel.textContent = '';
+            return;
+        }
+        const uid = getElementUID(selectedElement);
+        const state = uid ? getElementAnimationState(uid) || {} : {};
+        let mode = 'none';
+        if (state.gradientAnimActive) {
+            mode = 'gradient';
+        } else if (state.colorAnimActive) {
+            mode = 'color';
+        }
+        bgModeLabel.textContent = `Background mode: ${mode}`;
     }
 
     const textPresets = {
@@ -993,9 +1539,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return el && el.getAttribute && el.getAttribute('data-uid');
     }
 
+    function ensureElementUID(el) {
+        if (!el) return null;
+        let uid = getElementUID(el);
+        if (!uid) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            uid = Array.from({ length: 9 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+            el.setAttribute('data-uid', uid);
+        }
+        return uid;
+    }
+
     // --- Helper: Clear all intervals for an element by UID ---
     function clearAllIntervalsForElement(el) {
-        const uid = getElementUID(el);
+        const uid = ensureElementUID(el);
         if (!uid) return;
         clearIntervalsForUID(uid, colorTransitionIntervals, gradientAnimIntervals, elementAnimIntervals);
     }
@@ -1303,6 +1860,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <label style="font-size:14px;cursor:pointer;">
                     <input type="checkbox" id="force-theme-override" style="margin-right:6px;vertical-align:middle;">Override all element backgrounds
                 </label>
+                <br/>
+                <label style="font-size:14px;cursor:pointer;">
+                    <input type="checkbox" id="reset-animations" style="margin-right:6px;vertical-align:middle;" checked>Reset animations when applying theme
+                </label>
             </div>
             <div id="theme-swatches" style="display:flex; flex-direction:column; gap:16px;"></div>
             <button id="close-theme-popup" style="margin-top:16px;">Close</button>
@@ -1481,24 +2042,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Apply theme to canvas and all elements
     function applyTheme(idx) {
         currentThemeIndex = idx;
+        savedProjectThemeIndex = idx;
         const theme = colorThemes[idx];
         if (!theme) return;
         // Set canvas background
         canvas.style.background = theme.colors[0];
-        // Check if override is selected
+        // Check if override/reset options are selected
         const forceOverride = themePopup.querySelector('#force-theme-override').checked;
+        const resetAnimations = themePopup.querySelector('#reset-animations').checked;
         // Set all element backgrounds (cycle through theme colors)
         const elements = canvas.querySelectorAll('.element');
         elements.forEach((el, i) => {
-            // --- Always clear all intervals for this element (including gradients/animations/color transitions) ---
-            clearAllIntervalsForElement(el);
-            // --- Remove any gradient/animation/color transition dataset and style ---
-            delete el.dataset.colorTransition;
-            delete el.dataset.colorGradient;
-            delete el.dataset.elementAnimation;
-            el.style.background = '';
-            el.style.backgroundColor = '';
-            el.style.transform = '';
+            if (resetAnimations) {
+                // --- Clear all intervals for this element (including gradients/animations/color transitions) ---
+                clearAllIntervalsForElement(el);
+                // --- Remove any gradient/animation/color transition dataset and style ---
+                delete el.dataset.colorTransition;
+                delete el.dataset.colorGradient;
+                delete el.dataset.elementAnimation;
+                el.style.background = '';
+                el.style.backgroundColor = '';
+                el.style.transform = '';
+            }
             // --- Set background color ---
             let bgColor = forceOverride
                 ? theme.colors[(i + 1) % theme.colors.length]
@@ -1540,6 +2105,48 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial render
     renderThemeSwatches();
 
+    // --- Templates popup ---
+    function applyTemplate(templateKey) {
+        const tpl = builtinTemplates[templateKey];
+        if (!tpl) return;
+        frames = [];
+        const frameCount = tpl.frames || 1;
+        for (let i = 0; i < frameCount; i++) {
+            const built = tpl.build(i);
+            frames.push(built);
+        }
+        currentFrameIndex = 0;
+        loadFrame(0);
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
+    function openTemplatesPopup() {
+        const popup = document.createElement('div');
+        popup.className = 'popup';
+        popup.style.zIndex = 15000;
+        popup.innerHTML = `
+            <h3>Select a template</h3>
+            <button data-template="filmStoryboard">Film storyboard</button>
+            <button data-template="eventWelcome">Event welcome signboard</button>
+            <button data-template="groupPrototyping">Group prototyping</button>
+            <button data-template="designThinking">Design thinking</button>
+            <button data-template="classroomCollab">Classroom collaboration</button>
+            <button class="cancel-btn">Cancel</button>
+        `;
+        document.body.appendChild(popup);
+        popup.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            if (btn.classList.contains('cancel-btn')) {
+                document.body.removeChild(popup);
+                return;
+            }
+            const key = btn.getAttribute('data-template');
+            if (key) applyTemplate(key);
+            document.body.removeChild(popup);
+        });
+    }
+
     // Restore event listeners for load, clear, and export buttons
     if (loadBtn) {
         loadBtn.addEventListener('click', () => {
@@ -1553,14 +2160,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const imported = JSON.parse(e.target.result);
-                    if (imported && imported.elements) {
+                    if (imported && imported.project) {
+                        // New project format
+                        frames = Array.isArray(imported.frames) && imported.frames.length
+                            ? imported.frames
+                            : [snapshotCurrentCanvas()];
+                        currentFrameIndex = imported.currentFrameIndex || 0;
+                        components = Array.isArray(imported.components) ? imported.components : [];
+                        savedProjectThemeIndex = typeof imported.themeIndex === 'number' ? imported.themeIndex : null;
+                        loadFrame(currentFrameIndex);
+                        if (savedProjectThemeIndex !== null) {
+                            applyTheme(savedProjectThemeIndex);
+                        }
+                        renderComponentsList();
+                        alert('Project loaded!');
+                        if (typeof saveState === 'function' && canvas) saveState(canvas);
+                    } else if (imported && imported.elements) {
+                        // Legacy single-layout format
+                        if (Array.isArray(imported.elements)) {
+                            imported.elements.forEach(elData => {
+                                if (!elData.dataset) elData.dataset = {};
+                                if (!elData.dataset.uid && !elData.dataset['uid']) {
+                                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                                    const uid = Array.from({ length: 9 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+                                    elData.dataset.uid = uid;
+                                }
+                            });
+                        }
                         frames = [imported];
                         currentFrameIndex = 0;
                         loadFrame(0);
                         alert('Layout loaded!');
                         if (typeof saveState === 'function' && canvas) saveState(canvas);
                     } else {
-                        alert('Invalid layout file.');
+                        alert('Invalid project or layout file.');
                     }
                 };
                 reader.readAsText(file);
@@ -1606,11 +2239,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
             const exportData = {
-                elements,
-                canvas: {
-                    background: canvas.style.background,
+                project: true,
+                frames,
+                currentFrameIndex,
+                components,
+                themeIndex: savedProjectThemeIndex,
+                canvasSize: {
                     width: canvas.style.width,
-                    height: canvas.style.height,
+                    height: canvas.style.height
                 }
             };
             const json = JSON.stringify(exportData, null, 2);
@@ -1627,6 +2263,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
         });
     }
+    if (playModeBtn) {
+        playModeBtn.addEventListener('click', () => {
+            if (isPlayMode) {
+                exitPlayMode();
+            } else {
+                enterPlayMode();
+            }
+        });
+    }
+    if (templatesBtn) {
+        templatesBtn.addEventListener('click', () => {
+            openTemplatesPopup();
+        });
+    }
 
     // --- Apply Color Transition: Modular per-element state and animation ---
     applyTransitionBtn.addEventListener('click', () => {
@@ -1636,14 +2286,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const transitionTime = parseFloat(transitionTimeInput.value) || 2;
             const uid = getElementUID(selectedElement);
             if (!uid) return;
-            // Build modular animation state
+            // Get any existing state so we can keep non-background fields
+            const existingState = getElementAnimationState(uid) || {};
+            // Stop any existing gradient animation for this element
+            if (gradientAnimIntervals.has(uid)) {
+                clearInterval(gradientAnimIntervals.get(uid));
+                gradientAnimIntervals.delete(uid);
+            }
+            // Build modular animation state (color mode wins over gradient mode)
             const animationState = {
+                ...existingState,
+                // Color transition on
                 colorAnimActive: true,
                 colorAnimStartColor: startColor,
                 colorAnimEndColor: endColor,
-                colorAnimTransitionTime: transitionTime
+                colorAnimTransitionTime: transitionTime,
+                // Explicitly turn off gradient animation for background so modes don't clash
+                gradientAnimActive: false
             };
             setElementAnimationState(uid, animationState);
+            // Ensure we are using solid background color (not a leftover gradient)
+            selectedElement.style.background = '';
             // Start and restore animation using modular logic
             restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
             if (typeof saveState === 'function' && canvas) saveState();
@@ -1661,14 +2324,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
             const uid = getElementUID(selectedElement);
             if (!uid) return;
-            // Build modular animation state
+            // Get any existing state so we can keep non-background fields
+            const existingState = getElementAnimationState(uid) || {};
+            // Stop any existing color transition animation for this element
+            if (colorTransitionIntervals.has(uid)) {
+                clearInterval(colorTransitionIntervals.get(uid));
+                colorTransitionIntervals.delete(uid);
+            }
+            // Build modular animation state (gradient mode wins over color mode)
             const animationState = {
-                gradientAnimActive: true,
+                ...existingState,
+                gradientAnimActive: !!(animStyle && animStyle !== 'none'),
                 gradientStartColor: startColor,
                 gradientEndColor: endColor,
                 gradientDirection: direction,
                 gradientType: gradientType,
-                gradientAnimStyle: animStyle
+                gradientAnimStyle: animStyle,
+                // Turn off color transition so they don't fight for the background
+                colorAnimActive: false
             };
             setElementAnimationState(uid, animationState);
             // --- Immediately set static gradient background for visual feedback ---
@@ -1685,6 +2358,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 gradient = `linear-gradient(${direction}, ${startColor}, ${endColor})`;
             }
             selectedElement.style.background = gradient;
+            // Clear plain background color so the gradient is visually authoritative
+            selectedElement.style.backgroundColor = '';
             // Start and restore animation using modular logic
             restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
             if (typeof saveState === 'function' && canvas) saveState();

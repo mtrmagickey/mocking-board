@@ -41,16 +41,48 @@
                 <span id="frame-label">Frame 1</span>
                 <button id="frame-next-btn" aria-label="Next frame">▶</button>
                 <button id="frame-add-btn" aria-label="Add new frame">+ Frame</button>
+                <label for="frame-duration" style="margin-left:8px;font-size:11px;">Duration (s)</label>
+                <input id="frame-duration" type="number" min="1" max="60" value="3" style="width:48px;font-size:11px;" />
             </div>
+                <!-- Onboarding overlay for first-time users -->
+                <div id="onboarding-overlay" style="display:none;">
+                    <div class="onboarding-backdrop"></div>
+                    <div class="onboarding-panel" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+                        <h2 id="onboarding-title">Welcome to Mocking Board</h2>
+                        <p id="onboarding-body"></p>
+                        <div class="onboarding-steps">
+                            <span id="onboarding-step-indicator"></span>
+                        </div>
+                        <div class="onboarding-actions">
+                            <button id="onboarding-skip">Skip</button>
+                            <button id="onboarding-next">Next</button>
+                        </div>
+                    </div>
+                </div>
         </main>
         <div id="toolbar" class="toolbar collapsed" role="toolbar" aria-label="Main toolbar">
-            <button id="load-btn" aria-label="Load project">Load</button>
-            <button id="clear-btn" aria-label="Clear canvas">Clear</button>
-            <button id="export-btn" aria-label="Export project">Export</button>
-            <button id="toggle-sidebar-btn" aria-label="Toggle sidebar">Toggle Sidebar</button>
-            <button id="lock-btn" aria-label="Lock selected element">Lock</button>
-            <button id="background-btn" aria-label="Change background">Background</button>
-            <button id="toggle-grid-btn" aria-label="Toggle grid">Toggle Grid</button>
+            <div class="toolbar-group" aria-label="Project">
+                <button id="load-btn" aria-label="Load project" title="Load project JSON">Load</button>
+                <button id="clear-btn" aria-label="Clear canvas" title="Clear canvas">Clear</button>
+                <button id="export-btn" aria-label="Export project" title="Export current layout as JSON">Export</button>
+                <button id="templates-btn" aria-label="New from template" title="Start from a predefined layout">Templates</button>
+            </div>
+            <div class="toolbar-group" aria-label="View">
+                <button id="toggle-sidebar-btn" aria-label="Toggle sidebar" title="Show or hide element sidebar">Sidebar</button>
+                <button id="background-btn" aria-label="Change background" title="Change canvas background color">Background</button>
+                <button id="toggle-grid-btn" aria-label="Toggle grid" title="Toggle grid overlay">Grid</button>
+                <span class="toolbar-divider"></span>
+                <button id="zoom-out-btn" aria-label="Zoom out" title="Zoom out">-</button>
+                <span id="zoom-label" aria-live="polite">100%</span>
+                <button id="zoom-in-btn" aria-label="Zoom in" title="Zoom in">+</button>
+                <button id="zoom-fit-btn" aria-label="Fit to window" title="Fit canvas to window">Fit</button>
+            </div>
+            <div class="toolbar-group" aria-label="Selection">
+                <button id="lock-btn" aria-label="Lock selection" title="Lock or unlock element editing">Lock</button>
+            </div>
+            <div class="toolbar-group" aria-label="Playback">
+                <button id="play-mode-btn" aria-label="Play storyboard" title="Enter play/preview mode">Play</button>
+            </div>
         </div>
     </div>
 
