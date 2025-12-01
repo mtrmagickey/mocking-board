@@ -8,11 +8,7 @@ import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
 document.addEventListener('DOMContentLoaded', () => {
     // --- Global palette (Bright Amber / Black / Grey Olive / Old Gold / Olive Bark) ---
     const BASE_PALETTE = {
-        brightAmber: '#F5C919',
-        black: '#000004',
-        greyOlive: '#8D8C8C',
-        oldGold: '#D1BF4B',
-        oliveBark: '#6D5608'
+        brightAmber: '#F5C919'
     };
 
     const canvas = document.getElementById('canvas');
@@ -49,9 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLabel = document.getElementById('zoom-label');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
-    const animationsPanel = document.getElementById('animations-panel');
-    const animationsList = document.getElementById('animations-list');
-    const reduceMotionToggle = document.getElementById('reduce-motion-toggle');
+    const animationsPanel = null;
+    const animationsList = null;
+    const reduceMotionToggle = null;
 
     const fontColorPicker = document.createElement('input');
     fontColorPicker.type = 'color';
@@ -210,10 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const root = document.documentElement;
         if (!root) return;
         root.style.setProperty('--mb-amber', BASE_PALETTE.brightAmber);
-        root.style.setProperty('--mb-black', BASE_PALETTE.black);
-        root.style.setProperty('--mb-grey-olive', BASE_PALETTE.greyOlive);
-        root.style.setProperty('--mb-old-gold', BASE_PALETTE.oldGold);
-        root.style.setProperty('--mb-olive-bark', BASE_PALETTE.oliveBark);
     }
 
     function updateFrameLabel() {
@@ -2273,117 +2265,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderAnimationsPanel() {
-        if (!animationsPanel || !animationsList) return;
-        animationsList.innerHTML = '';
-        const elements = Array.from(canvas.querySelectorAll('.element')).filter(el => el.dataset.elementAnimation);
-        if (!elements.length) {
-            animationsList.textContent = 'No animated elements on this frame.';
-            return;
-        }
-        elements.forEach(el => {
-            const uid = getElementUID(el) || ensureElementUID(el);
-            const row = document.createElement('div');
-            row.style.display = 'flex';
-            row.style.alignItems = 'center';
-            row.style.justifyContent = 'space-between';
-            row.style.marginBottom = '2px';
-            const label = document.createElement('span');
-            const meta = el.dataset.elementAnimation ? JSON.parse(el.dataset.elementAnimation) : {};
-            label.textContent = meta.type || 'anim';
-            const btn = document.createElement('button');
-            const isRunning = elementAnimIntervals.has(uid);
-            btn.textContent = isRunning ? 'Pause' : 'Play';
-            btn.addEventListener('click', () => {
-                toggleElementAnimation(el, uid);
-            });
-            row.appendChild(label);
-            row.appendChild(btn);
-            animationsList.appendChild(row);
-        });
-    }
+    function renderAnimationsPanel() {}
 
-    function toggleElementAnimation(el, uid) {
-        if (!el || !el.dataset.elementAnimation) return;
-        if (elementAnimIntervals.has(uid)) {
-            clearInterval(elementAnimIntervals.get(uid));
-            elementAnimIntervals.delete(uid);
-            return;
-        }
-        if (reduceMotion) return;
-        try {
-            const { type, duration } = JSON.parse(el.dataset.elementAnimation);
-            let intervalId;
-            if (type === 'scale') {
-                let scale = 1, direction = 1;
-                intervalId = setInterval(() => {
-                    if (!document.body.contains(el)) {
-                        clearInterval(intervalId);
-                        elementAnimIntervals.delete(uid);
-                        return;
-                    }
-                    scale += direction * 0.02;
-                    if (scale > 1.2) direction = -1;
-                    if (scale < 0.8) direction = 1;
-                    el.dataset.scale = scale;
-                    setElementTransform(el, {
-                        scale,
-                        rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined,
-                        translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
-                    });
-                }, 1000 * (parseFloat(duration) || 2) / 40);
-            } else if (type === 'move') {
-                let pos = 0, dir = 1;
-                intervalId = setInterval(() => {
-                    if (!document.body.contains(el)) {
-                        clearInterval(intervalId);
-                        elementAnimIntervals.delete(uid);
-                        return;
-                    }
-                    pos += dir * 2;
-                    if (pos > 40) dir = -1;
-                    if (pos < -40) dir = 1;
-                    el.dataset.translateX = pos;
-                    setElementTransform(el, {
-                        translateX: pos,
-                        scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
-                        rotate: el.dataset.rotation ? parseFloat(el.dataset.rotation) : undefined
-                    });
-                }, 1000 * (parseFloat(duration) || 2) / 40);
-            } else if (type === 'rotate') {
-                let angle = 0;
-                intervalId = setInterval(() => {
-                    if (!document.body.contains(el)) {
-                        clearInterval(intervalId);
-                        elementAnimIntervals.delete(uid);
-                        return;
-                    }
-                    angle = (angle + 5) % 360;
-                    el.dataset.rotation = angle;
-                    setElementTransform(el, {
-                        rotate: angle,
-                        scale: el.dataset.scale ? parseFloat(el.dataset.scale) : undefined,
-                        translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
-                    });
-                }, 1000 * (parseFloat(duration) || 2) / 40);
-            }
-            if (intervalId) elementAnimIntervals.set(uid, intervalId);
-        } finally {
-            renderAnimationsPanel();
-        }
-    }
-
-    if (reduceMotionToggle) {
-        reduceMotionToggle.addEventListener('change', () => {
-            reduceMotion = reduceMotionToggle.checked;
-            if (reduceMotion) {
-                // Stop all element animations when reduce-motion is enabled
-                elementAnimIntervals.forEach((intervalId) => clearInterval(intervalId));
-                elementAnimIntervals.clear();
-            }
-            renderAnimationsPanel();
-        });
-    }
+    function toggleElementAnimation() {}
 
     // Call restoreElementAnimations after undo/redo/import/load/initial render
     // Example: after saveState() or after elements are re-created
