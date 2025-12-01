@@ -817,6 +817,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Toolbar buttons: Templates, Grid toggle, Play/Stop ---
+    if (templatesBtn) {
+        templatesBtn.addEventListener('click', () => {
+            // Simple templates popup listing built-in templates
+            const keys = Object.keys(builtinTemplates);
+            if (!keys.length) return;
+            const choice = window.prompt(
+                'Templates:\n' + keys.map((k, i) => `${i + 1}. ${builtinTemplates[k].name}`).join('\n') + '\n\nType a number to apply:',
+                '1'
+            );
+            const idx = parseInt(choice, 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= keys.length) return;
+            const key = keys[idx];
+            const tpl = builtinTemplates[key];
+            if (!tpl) return;
+            frames = [];
+            for (let i = 0; i < (tpl.frames || 1); i++) {
+                frames.push(tpl.build(i));
+            }
+            currentFrameIndex = 0;
+            loadFrame(currentFrameIndex);
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (backgroundBtn) {
+        backgroundBtn.addEventListener('click', () => {
+            gridEnabled = !gridEnabled;
+            const gridEl = document.getElementById('grid');
+            if (gridEl) {
+                gridEl.style.display = gridEnabled ? 'block' : 'none';
+            }
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (playModeBtn) {
+        playModeBtn.addEventListener('click', () => {
+            if (isPlayMode) {
+                exitPlayMode();
+            } else {
+                enterPlayMode();
+            }
+        });
+    }
+
     function getSelectedElementsSnapshot() {
         const selectedEls = Array.from(canvas.querySelectorAll('.element.element--selected'));
         if (!selectedEls.length) return null;
@@ -1478,7 +1524,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 selectedElement.style.color = event.target.value;
             }
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
 
