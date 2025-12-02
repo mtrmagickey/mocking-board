@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const BASE_PALETTE = {
         brightAmber: '#F5C919'
     };
+    const DEFAULT_FRAME_DURATION = 30;
+    const FRAME_DURATION_MAX = 120;
 
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
@@ -43,19 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLabel = document.getElementById('zoom-label');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
-    const inspectorPanel = document.getElementById('inspector-panel');
-    const inspectorTargetLabel = document.getElementById('inspector-target');
-    const inspectorBgColorInput = document.getElementById('inspector-bg-color');
-    const inspectorTextColorInput = document.getElementById('inspector-text-color');
-    const inspectorFontFamilySelect = document.getElementById('inspector-font-family');
-    const inspectorFontSizeInput = document.getElementById('inspector-font-size');
-    const inspectorColorAnimPauseInput = document.getElementById('inspector-color-anim-pause');
-    const inspectorColorAnimSpeedInput = document.getElementById('inspector-color-anim-speed');
-    const inspectorColorAnimStatus = document.getElementById('inspector-color-anim-status');
-    const inspectorGradientAnimPauseInput = document.getElementById('inspector-gradient-anim-pause');
-    const inspectorGradientAnimSpeedInput = document.getElementById('inspector-gradient-anim-speed');
-    const inspectorGradientAnimStatus = document.getElementById('inspector-gradient-anim-status');
-    const inspectorResetButtons = document.querySelectorAll('.inspector-reset-btn');
     const animationsPanel = null;
     const animationsList = null;
     const reduceMotionToggle = null;
@@ -241,9 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateColorTransitionPreview();
     updateColorGradientPreview();
 
-    if (inspectorPanel) {
-        inspectorPanel.classList.add('no-selection');
-    }
 
     let draggedElement = null;
     let offset = { x: 0, y: 0 };
@@ -261,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let marqueeStart = null;
     let hGuide = null;
     let vGuide = null;
-    let inspectorObserver = null;
 
     // --- Multi-frame / storyboard state ---
     let frames = [];
@@ -270,6 +255,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlayMode = false;
     let playModeIntervalId = null;
     let zoomLevel = 1;
+
+    function getFrameDuration(frame) {
+        if (!frame) return DEFAULT_FRAME_DURATION;
+        const duration = parseInt(frame.duration, 10);
+        if (!isFinite(duration) || duration <= 0) return DEFAULT_FRAME_DURATION;
+        return Math.min(FRAME_DURATION_MAX, duration);
+    }
+
+    function ensureFrameDuration(frame) {
+        if (!frame) return DEFAULT_FRAME_DURATION;
+        const safeDuration = getFrameDuration(frame);
+        frame.duration = safeDuration;
+        return safeDuration;
+    }
 
     function applyAppPaletteToCSS() {
         const root = document.documentElement;
@@ -281,9 +280,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (frameLabel) {
             frameLabel.textContent = `Frame ${currentFrameIndex + 1}`;
         }
-        if (frameDurationInput && frames[currentFrameIndex]) {
-            const dur = frames[currentFrameIndex].duration || 3;
-            frameDurationInput.value = dur;
+        if (frameDurationInput) {
+            const currentFrame = frames[currentFrameIndex];
+            const duration = getFrameDuration(currentFrame);
+            if (currentFrame) {
+                currentFrame.duration = duration;
+            }
+            frameDurationInput.value = duration;
         }
     }
 
@@ -739,13 +742,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 width: canvas.style.width,
                 height: canvas.style.height,
             },
-            duration: (frames[currentFrameIndex] && frames[currentFrameIndex].duration) || 3
+            duration: getFrameDuration(frames[currentFrameIndex])
         };
     }
 
     function loadFrame(index) {
         const frame = frames[index];
         canvas.innerHTML = '<div id="grid" class="grid"></div>';
+        if (frame) {
+            ensureFrameDuration(frame);
+        }
         if (!frame || !frame.elements) {
             reattachEventListeners();
             updateFrameLabel();
@@ -873,7 +879,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (frameAddBtn) {
         frameAddBtn.addEventListener('click', () => {
             frames[currentFrameIndex] = snapshotCurrentCanvas();
-            const emptyFrame = { elements: [], canvas: { background: canvas.style.background, width: canvas.style.width, height: canvas.style.height } };
+            const emptyFrame = {
+                elements: [],
+                canvas: { background: canvas.style.background, width: canvas.style.width, height: canvas.style.height },
+                duration: DEFAULT_FRAME_DURATION
+            };
             frames.push(emptyFrame);
             currentFrameIndex = frames.length - 1;
             loadFrame(currentFrameIndex);
@@ -883,45 +893,58 @@ document.addEventListener('DOMContentLoaded', () => {
     if (frameDurationInput) {
         frameDurationInput.addEventListener('change', () => {
             const val = parseInt(frameDurationInput.value, 10);
-            const clamped = isFinite(val) ? Math.max(1, Math.min(60, val)) : 3;
+            const clamped = isFinite(val) ? Math.max(1, Math.min(FRAME_DURATION_MAX, val)) : DEFAULT_FRAME_DURATION;
             frameDurationInput.value = clamped;
-            if (frames[currentFrameIndex]) {
-                frames[currentFrameIndex].duration = clamped;
+            if (!frames[currentFrameIndex]) {
+                frames[currentFrameIndex] = snapshotCurrentCanvas();
             }
+            frames[currentFrameIndex].duration = clamped;
         });
     }
 
     function enterPlayMode() {
-        if (isPlayMode || !frames.length) return;
+        if (isPlayMode) return;
         // Commit current canvas into the current frame before starting playback
         frames[currentFrameIndex] = snapshotCurrentCanvas();
-        if (frames.length < 2) {
-            alert('Add at least two frames to use Play mode.');
-            return;
-        }
+        ensureFrameDuration(frames[currentFrameIndex]);
         isPlayMode = true;
         canvasContainer.classList.add('play-mode');
-        if (playModeBtn) playModeBtn.textContent = 'Stop';
+        if (document.body) {
+            document.body.classList.add('play-mode-active');
+        }
+        if (playModeBtn) {
+            playModeBtn.textContent = 'Pause';
+            playModeBtn.classList.add('is-playing');
+            playModeBtn.setAttribute('aria-pressed', 'true');
+        }
         let index = currentFrameIndex;
         const scheduleNext = () => {
             if (!isPlayMode || !frames.length) return;
             const frame = frames[index] || {};
-            const dur = frame.duration || 3;
+            const durationSeconds = getFrameDuration(frame);
             playModeIntervalId = setTimeout(() => {
                 if (!isPlayMode) return;
                 index = (index + 1) % frames.length;
                 currentFrameIndex = index;
                 loadFrame(currentFrameIndex);
                 scheduleNext();
-            }, dur * 1000);
+            }, durationSeconds * 1000);
         };
         scheduleNext();
     }
 
     function exitPlayMode() {
+        if (!isPlayMode) return;
         isPlayMode = false;
         canvasContainer.classList.remove('play-mode');
-        if (playModeBtn) playModeBtn.textContent = 'Play';
+        if (document.body) {
+            document.body.classList.remove('play-mode-active');
+        }
+        if (playModeBtn) {
+            playModeBtn.textContent = 'Play';
+            playModeBtn.classList.remove('is-playing');
+            playModeBtn.setAttribute('aria-pressed', 'false');
+        }
         if (playModeIntervalId) {
             clearTimeout(playModeIntervalId);
             playModeIntervalId = null;
@@ -945,7 +968,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!tpl) return;
             frames = [];
             for (let i = 0; i < (tpl.frames || 1); i++) {
-                frames.push(tpl.build(i));
+                const builtFrame = tpl.build(i) || { elements: [], canvas: {} };
+                ensureFrameDuration(builtFrame);
+                frames.push(builtFrame);
             }
             currentFrameIndex = 0;
             loadFrame(currentFrameIndex);
@@ -965,6 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (playModeBtn) {
+        playModeBtn.setAttribute('aria-pressed', 'false');
         playModeBtn.addEventListener('click', () => {
             if (isPlayMode) {
                 exitPlayMode();
@@ -1507,72 +1533,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
-    function detachInspectorObserver() {
-        if (inspectorObserver) {
-            inspectorObserver.disconnect();
-            inspectorObserver = null;
-        }
-    }
-
-    function attachInspectorObserver() {
-        detachInspectorObserver();
-        if (!selectedElement || typeof MutationObserver === 'undefined') return;
-        inspectorObserver = new MutationObserver(() => {
-            updateInspectorPanel();
-        });
-        inspectorObserver.observe(selectedElement, { attributes: true, attributeFilter: ['style'], subtree: true });
-    }
-
-    function normalizeHex(color, fallback = '#ffffff') {
-        if (!color || color === 'transparent' || color.includes('gradient')) return fallback;
-        if (color.startsWith('#')) {
-            if (color.length === 4) {
-                return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
-            }
-            return color;
-        }
-        if (color.startsWith('rgb')) {
-            const result = color.match(/\d+/g);
-            if (!result || result.length < 3) return fallback;
-            const hex = result.slice(0, 3)
-                .map(val => Math.max(0, Math.min(255, parseInt(val, 10) || 0)).toString(16).padStart(2, '0'))
-                .join('');
-            return `#${hex}`;
-        }
-        return fallback;
-    }
-
-    function getEditableTargets(baseEl) {
-        if (!baseEl) return [];
-        const editables = baseEl.querySelectorAll('.editable');
-        return editables.length ? Array.from(editables) : [baseEl];
-    }
-
-    function resetInspectorProperty(targetKey) {
-        if (!selectedElement) return;
-        const textTargets = getEditableTargets(selectedElement);
-        if (targetKey === 'bg-color') {
-            selectedElement.style.background = '';
-            selectedElement.style.backgroundColor = '';
-        } else if (targetKey === 'text-color') {
-            textTargets.forEach(target => {
-                target.style.color = '';
-            });
-        } else if (targetKey === 'font-family') {
-            textTargets.forEach(target => {
-                target.style.fontFamily = '';
-            });
-        } else if (targetKey === 'font-size') {
-            textTargets.forEach(target => {
-                target.style.fontSize = '';
-            });
-        } else {
-            return;
-        }
-        if (typeof saveState === 'function' && canvas) saveState(canvas);
-        updateInspectorPanel();
-    }
-
     const BOOL_ANIMATION_KEYS = new Set([
         'colorAnimActive',
         'colorAnimPause',
@@ -1624,128 +1584,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    function resetAnimationInspectorControls() {
-        if (inspectorColorAnimPauseInput) {
-            inspectorColorAnimPauseInput.checked = false;
-            inspectorColorAnimPauseInput.disabled = true;
-        }
-        if (inspectorColorAnimSpeedInput) {
-            inspectorColorAnimSpeedInput.value = '';
-            inspectorColorAnimSpeedInput.disabled = true;
-        }
-        if (inspectorColorAnimStatus) {
-            inspectorColorAnimStatus.textContent = 'Inactive';
-        }
-        if (inspectorGradientAnimPauseInput) {
-            inspectorGradientAnimPauseInput.checked = false;
-            inspectorGradientAnimPauseInput.disabled = true;
-        }
-        if (inspectorGradientAnimSpeedInput) {
-            inspectorGradientAnimSpeedInput.value = '';
-            inspectorGradientAnimSpeedInput.disabled = true;
-        }
-        if (inspectorGradientAnimStatus) {
-            inspectorGradientAnimStatus.textContent = 'Inactive';
-        }
-    }
-
-    function updateAnimationInspectorControls(element, animationState) {
-        if (!element) {
-            resetAnimationInspectorControls();
-            return;
-        }
-        const dataset = element.dataset || {};
-        const colorActive = animationState ? !!animationState.colorAnimActive : dataset.colorAnimActive === 'true';
-        const colorPaused = animationState ? !!animationState.colorAnimPause : dataset.colorAnimPause === 'true';
-        const rawColorSpeed = animationState && animationState.colorAnimSpeed !== undefined
-            ? parseFloat(animationState.colorAnimSpeed)
-            : dataset.colorAnimSpeed
-                ? parseFloat(dataset.colorAnimSpeed)
-                : animationState && animationState.colorAnimTransitionTime
-                    ? parseFloat(animationState.colorAnimTransitionTime) * 1000
-                    : 2000;
-        const colorSpeed = isFinite(rawColorSpeed) ? rawColorSpeed : 2000;
-
-        const gradientActive = animationState ? !!animationState.gradientAnimActive : dataset.gradientAnimActive === 'true';
-        const gradientPaused = animationState ? !!animationState.gradientPause : dataset.gradientPause === 'true';
-        const rawGradientSpeed = animationState && animationState.gradientSpeed !== undefined
-            ? parseFloat(animationState.gradientSpeed)
-            : dataset.gradientSpeed
-                ? parseFloat(dataset.gradientSpeed)
-                : 50;
-        const gradientSpeed = isFinite(rawGradientSpeed) ? rawGradientSpeed : 50;
-
-        if (inspectorColorAnimPauseInput) {
-            inspectorColorAnimPauseInput.disabled = !colorActive;
-            inspectorColorAnimPauseInput.checked = colorActive ? colorPaused : false;
-        }
-        if (inspectorColorAnimSpeedInput) {
-            inspectorColorAnimSpeedInput.disabled = !colorActive;
-            inspectorColorAnimSpeedInput.value = colorActive ? Math.round(colorSpeed) : '';
-        }
-        if (inspectorColorAnimStatus) {
-            inspectorColorAnimStatus.textContent = colorActive ? (colorPaused ? 'Paused' : 'Playing') : 'Inactive';
-        }
-
-        if (inspectorGradientAnimPauseInput) {
-            inspectorGradientAnimPauseInput.disabled = !gradientActive;
-            inspectorGradientAnimPauseInput.checked = gradientActive ? gradientPaused : false;
-        }
-        if (inspectorGradientAnimSpeedInput) {
-            inspectorGradientAnimSpeedInput.disabled = !gradientActive;
-            inspectorGradientAnimSpeedInput.value = gradientActive ? Math.round(Math.max(10, gradientSpeed)) : '';
-        }
-        if (inspectorGradientAnimStatus) {
-            inspectorGradientAnimStatus.textContent = gradientActive ? (gradientPaused ? 'Paused' : 'Playing') : 'Inactive';
-        }
-    }
-
-    function updateInspectorPanel() {
-        if (!inspectorPanel) return;
-        const hasSelection = !!selectedElement;
-        inspectorPanel.classList.toggle('no-selection', !hasSelection);
-        if (!hasSelection) {
-            if (inspectorTargetLabel) inspectorTargetLabel.textContent = 'No selection';
-            if (inspectorFontSizeInput) inspectorFontSizeInput.value = '';
-            resetAnimationInspectorControls();
-            return;
-        }
-        const typeLabel = selectedElement.getAttribute('data-type') || 'Element';
-        if (inspectorTargetLabel) {
-            inspectorTargetLabel.textContent = typeLabel.replace(/^[a-z]/, c => c.toUpperCase());
-        }
-        const baseStyles = window.getComputedStyle(selectedElement);
-        const textTarget = selectedElement.querySelector('.editable') || selectedElement;
-        const textStyles = window.getComputedStyle(textTarget);
-        if (inspectorBgColorInput) {
-            inspectorBgColorInput.value = normalizeHex(baseStyles.backgroundColor, '#ffffff');
-        }
-        if (inspectorTextColorInput) {
-            inspectorTextColorInput.value = normalizeHex(textStyles.color, '#111111');
-        }
-        if (inspectorFontFamilySelect) {
-            const fontFamily = textStyles.fontFamily || '';
-            const normalized = fontFamily.replace(/"/g, '');
-            const match = Array.from(inspectorFontFamilySelect.options).find(opt => opt.value && normalized.startsWith(opt.value.replace(/"/g, '')));
-            inspectorFontFamilySelect.value = match ? match.value : '';
-        }
-        if (inspectorFontSizeInput) {
-            const size = parseInt(textStyles.fontSize, 10);
-            inspectorFontSizeInput.value = isNaN(size) ? '' : size;
-        }
-        const animationState = ensureAnimationStateForElement(selectedElement);
-        updateAnimationInspectorControls(selectedElement, animationState);
-    }
-
     function applySelectionReference(el) {
         selectedElement = el || null;
-        if (selectedElement) {
-            attachInspectorObserver();
-        } else {
-            detachInspectorObserver();
-        }
         updateBgModeLabel();
-        updateInspectorPanel();
     }
 
     function setSelectedElement(el) {
@@ -2179,140 +2020,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedElement.style.color = event.target.value;
             }
             if (typeof saveState === 'function' && canvas) saveState(canvas);
-            updateInspectorPanel();
         }
     });
-
-    if (inspectorBgColorInput) {
-        inspectorBgColorInput.addEventListener('input', (event) => {
-            if (!selectedElement) return;
-            selectedElement.style.background = '';
-            selectedElement.style.backgroundColor = event.target.value;
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-            updateInspectorPanel();
-        });
-    }
-
-    if (inspectorTextColorInput) {
-        inspectorTextColorInput.addEventListener('input', (event) => {
-            if (!selectedElement) return;
-            const targets = getEditableTargets(selectedElement);
-            targets.forEach(target => {
-                target.style.color = event.target.value;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-            updateInspectorPanel();
-        });
-    }
-
-    if (inspectorFontFamilySelect) {
-        inspectorFontFamilySelect.addEventListener('change', (event) => {
-            if (!selectedElement) return;
-            const value = event.target.value;
-            const targets = getEditableTargets(selectedElement);
-            targets.forEach(target => {
-                target.style.fontFamily = value;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-            updateInspectorPanel();
-        });
-    }
-
-    if (inspectorFontSizeInput) {
-        inspectorFontSizeInput.addEventListener('input', (event) => {
-            if (!selectedElement) return;
-            const size = parseInt(event.target.value, 10);
-            if (!isFinite(size)) return;
-            const targets = getEditableTargets(selectedElement);
-            targets.forEach(target => {
-                target.style.fontSize = `${Math.max(8, Math.min(180, size))}px`;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-            updateInspectorPanel();
-        });
-    }
-
-    if (inspectorResetButtons && inspectorResetButtons.length) {
-        inspectorResetButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (!selectedElement) return;
-                const targetKey = btn.dataset.reset;
-                resetInspectorProperty(targetKey);
-            });
-        });
-    }
-
-    if (inspectorColorAnimPauseInput) {
-        inspectorColorAnimPauseInput.addEventListener('change', () => {
-            if (!selectedElement) return;
-            const state = ensureAnimationStateForElement(selectedElement);
-            if (!state || !state.colorAnimActive) {
-                inspectorColorAnimPauseInput.checked = false;
-                updateInspectorPanel();
-                return;
-            }
-            updateSelectedAnimationState(next => {
-                next.colorAnimPause = inspectorColorAnimPauseInput.checked;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-        });
-    }
-
-    if (inspectorColorAnimSpeedInput) {
-        inspectorColorAnimSpeedInput.addEventListener('change', () => {
-            if (!selectedElement) return;
-            const state = ensureAnimationStateForElement(selectedElement);
-            if (!state || !state.colorAnimActive) {
-                inspectorColorAnimSpeedInput.value = '';
-                updateInspectorPanel();
-                return;
-            }
-            let value = parseInt(inspectorColorAnimSpeedInput.value, 10);
-            if (!isFinite(value)) return;
-            value = Math.max(200, Math.min(10000, value));
-            inspectorColorAnimSpeedInput.value = value;
-            updateSelectedAnimationState(next => {
-                next.colorAnimSpeed = value;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-        });
-    }
-
-    if (inspectorGradientAnimPauseInput) {
-        inspectorGradientAnimPauseInput.addEventListener('change', () => {
-            if (!selectedElement) return;
-            const state = ensureAnimationStateForElement(selectedElement);
-            if (!state || !state.gradientAnimActive) {
-                inspectorGradientAnimPauseInput.checked = false;
-                updateInspectorPanel();
-                return;
-            }
-            updateSelectedAnimationState(next => {
-                next.gradientPause = inspectorGradientAnimPauseInput.checked;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-        });
-    }
-
-    if (inspectorGradientAnimSpeedInput) {
-        inspectorGradientAnimSpeedInput.addEventListener('change', () => {
-            if (!selectedElement) return;
-            const state = ensureAnimationStateForElement(selectedElement);
-            if (!state || !state.gradientAnimActive) {
-                inspectorGradientAnimSpeedInput.value = '';
-                updateInspectorPanel();
-                return;
-            }
-            let value = parseInt(inspectorGradientAnimSpeedInput.value, 10);
-            if (!isFinite(value)) return;
-            value = Math.max(10, Math.min(1000, value));
-            inspectorGradientAnimSpeedInput.value = value;
-            updateSelectedAnimationState(next => {
-                next.gradientSpeed = value;
-            });
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-        });
-    }
 
     document.getElementById('textAlign').addEventListener('click', () => {
         if (selectedElement) {
@@ -2377,7 +2086,6 @@ document.addEventListener('DOMContentLoaded', () => {
         mutator(nextState, currentState);
         setElementAnimationState(uid, nextState);
         restoreElementAnimation(selectedElement, nextState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
-        updateInspectorPanel();
     }
 
     // --- Helper: Get UID for an element ---
@@ -2988,7 +2696,8 @@ document.addEventListener('DOMContentLoaded', () => {
         frames = [];
         const frameCount = tpl.frames || 1;
         for (let i = 0; i < frameCount; i++) {
-            const built = tpl.build(i);
+            const built = tpl.build(i) || { elements: [], canvas: {} };
+            ensureFrameDuration(built);
             frames.push(built);
         }
         currentFrameIndex = 0;
@@ -3134,15 +2843,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }, 100);
-        });
-    }
-    if (playModeBtn) {
-        playModeBtn.addEventListener('click', () => {
-            if (isPlayMode) {
-                exitPlayMode();
-            } else {
-                enterPlayMode();
-            }
         });
     }
     if (templatesBtn) {

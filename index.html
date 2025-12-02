@@ -38,7 +38,7 @@
                 <button id="frame-add-btn" aria-label="Add new frame">+ Frame</button>
                 <button id="frame-play-btn" aria-label="Play storyboard" title="Preview storyboard playback">Play</button>
                 <label for="frame-duration" style="margin-left:8px;font-size:11px;">Duration (s)</label>
-                <input id="frame-duration" type="number" min="1" max="60" value="3" style="width:48px;font-size:11px;" />
+                <input id="frame-duration" type="number" min="1" max="120" value="30" style="width:48px;font-size:11px;" />
             </div>
                 <!-- Onboarding overlay for first-time users -->
                 <div id="onboarding-overlay" style="display:none;">
@@ -80,72 +80,6 @@
                 <button id="ungroup-btn" aria-label="Ungroup selection" title="Ungroup selected group">Ungroup</button>
             </div>
         </div>
-        <aside id="inspector-panel" class="inspector-panel" aria-label="Selection inspector">
-            <div class="inspector-header">
-                <h3>Inspector</h3>
-                <span id="inspector-target">No selection</span>
-            </div>
-            <div id="inspector-empty-state" class="inspector-empty">Select an element to edit its styles.</div>
-            <div id="inspector-fields" class="inspector-fields" aria-live="polite">
-                <label class="has-reset">Background
-                    <div class="inspector-input-row">
-                        <input type="color" id="inspector-bg-color">
-                        <button type="button" class="inspector-reset-btn" data-reset="bg-color" aria-label="Reset background">↺</button>
-                    </div>
-                </label>
-                <label class="has-reset">Text
-                    <div class="inspector-input-row">
-                        <input type="color" id="inspector-text-color">
-                        <button type="button" class="inspector-reset-btn" data-reset="text-color" aria-label="Reset text color">↺</button>
-                    </div>
-                </label>
-                <label class="has-reset">Font Family
-                    <div class="inspector-input-row">
-                        <select id="inspector-font-family">
-                            <option value="">Default</option>
-                            <option value="Roboto, sans-serif">Roboto</option>
-                            <option value="Old Standard TT, serif">Old Standard</option>
-                            <option value="Georgia, serif">Georgia</option>
-                            <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
-                        </select>
-                        <button type="button" class="inspector-reset-btn" data-reset="font-family" aria-label="Reset font family">↺</button>
-                    </div>
-                </label>
-                <label class="has-reset">Font Size (px)
-                    <div class="inspector-input-row">
-                        <input type="number" id="inspector-font-size" min="8" max="120" step="1">
-                        <button type="button" class="inspector-reset-btn" data-reset="font-size" aria-label="Reset font size">↺</button>
-                    </div>
-                </label>
-                <div class="inspector-section">
-                    <h4>Animation Controls</h4>
-                    <div class="inspector-subsection">
-                        <div class="inspector-subheader">
-                            <span>Color Transition</span>
-                            <span id="inspector-color-anim-status" class="anim-status">Inactive</span>
-                        </div>
-                        <label class="inline">
-                            <input type="checkbox" id="inspector-color-anim-pause"> Pause
-                        </label>
-                        <label>Speed (ms)
-                            <input type="number" id="inspector-color-anim-speed" min="200" max="10000" step="100">
-                        </label>
-                    </div>
-                    <div class="inspector-subsection">
-                        <div class="inspector-subheader">
-                            <span>Gradient Animation</span>
-                            <span id="inspector-gradient-anim-status" class="anim-status">Inactive</span>
-                        </div>
-                        <label class="inline">
-                            <input type="checkbox" id="inspector-gradient-anim-pause"> Pause
-                        </label>
-                        <label>Speed (ms)
-                            <input type="number" id="inspector-gradient-anim-speed" min="20" max="1000" step="10">
-                        </label>
-                    </div>
-                </div>
-            </div>
-        </aside>
     </div>
 
     <div id="contextMenu" class="context-menu" role="menu" aria-label="Element context menu">
