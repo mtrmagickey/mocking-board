@@ -1725,8 +1725,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.addEventListener('click', (e) => {
-        contextMenu.style.display = 'none';
-        if (!e.target.closest('.element') && e.target !== contextMenu) {
+        if (contextMenu) {
+            contextMenu.style.display = 'none';
+        }
+        const clickedElement = e.target.closest('.element');
+        const clickedContextMenu = e.target.closest('#contextMenu');
+        const clickedPopup = e.target.closest('.popup');
+        const clickedToolbar = e.target.closest('#toolbar');
+        const clickedInlineToolbar = e.target.closest('.inline-text-toolbar');
+        // Keep the current selection when interacting with menus/toolbars/popups
+        if (!clickedElement && !clickedContextMenu && !clickedPopup && !clickedToolbar && !clickedInlineToolbar) {
             clearSelection();
         }
     });
