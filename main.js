@@ -45,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLabel = document.getElementById('zoom-label');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
+    const signageModeBtn = document.getElementById('signage-mode-btn');
+    const signageExitBtn = document.getElementById('signage-exit-btn');
     const animationsPanel = null;
     const animationsList = null;
     const reduceMotionToggle = null;
@@ -255,6 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlayMode = false;
     let playModeIntervalId = null;
     let zoomLevel = 1;
+    const signageReasons = new Set();
+    let signageActive = false;
 
     function getFrameDuration(frame) {
         if (!frame) return DEFAULT_FRAME_DURATION;
@@ -269,6 +273,39 @@ document.addEventListener('DOMContentLoaded', () => {
         frame.duration = safeDuration;
         return safeDuration;
     }
+
+    function updateSignageModeState() {
+        const isActive = signageReasons.size > 0;
+        signageActive = isActive;
+        const bodyEl = document.body;
+        if (bodyEl) {
+            bodyEl.classList.toggle('signage-mode-active', isActive);
+        }
+        if (signageModeBtn) {
+            signageModeBtn.disabled = isActive;
+            signageModeBtn.textContent = isActive ? 'Signage Active' : 'Show Signage';
+            signageModeBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        }
+        if (signageExitBtn) {
+            signageExitBtn.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+        }
+    }
+
+    function enterSignageMode(reason = 'manual') {
+        signageReasons.add(reason);
+        updateSignageModeState();
+    }
+
+    function exitSignageMode(reason) {
+        if (reason) {
+            signageReasons.delete(reason);
+        } else {
+            signageReasons.clear();
+        }
+        updateSignageModeState();
+    }
+
+    updateSignageModeState();
 
     function applyAppPaletteToCSS() {
         const root = document.documentElement;
@@ -860,6 +897,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (signageModeBtn) {
+        signageModeBtn.addEventListener('click', () => {
+            enterSignageMode('manual');
+        });
+    }
+
+    if (signageExitBtn) {
+        signageExitBtn.addEventListener('click', () => {
+            exitSignageMode();
+            if (isPlayMode) {
+                exitPlayMode();
+            }
+        });
+    }
+
     if (framePrevBtn) {
         framePrevBtn.addEventListener('click', () => {
             frames[currentFrameIndex] = snapshotCurrentCanvas();
@@ -908,10 +960,8 @@ document.addEventListener('DOMContentLoaded', () => {
         frames[currentFrameIndex] = snapshotCurrentCanvas();
         ensureFrameDuration(frames[currentFrameIndex]);
         isPlayMode = true;
+        enterSignageMode('play');
         canvasContainer.classList.add('play-mode');
-        if (document.body) {
-            document.body.classList.add('play-mode-active');
-        }
         if (playModeBtn) {
             playModeBtn.textContent = 'Pause';
             playModeBtn.classList.add('is-playing');
@@ -937,9 +987,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isPlayMode) return;
         isPlayMode = false;
         canvasContainer.classList.remove('play-mode');
-        if (document.body) {
-            document.body.classList.remove('play-mode-active');
-        }
+        exitSignageMode('play');
         if (playModeBtn) {
             playModeBtn.textContent = 'Play';
             playModeBtn.classList.remove('is-playing');

@@ -10,6 +10,7 @@
     <div class="app-container">
         <nav id="sidebar" class="sidebar" role="navigation" aria-label="Element palette">
             <h2 id="sidebar-heading">Elements</h2>
+            <button id="signage-mode-btn" class="signage-toggle-btn" type="button" aria-pressed="false" aria-label="Hide controls for signage">Show Signage</button>
             <div role="group" aria-labelledby="sidebar-heading">
                 <button class="element-button" data-type="header" aria-label="Add header">Header</button>
                 <button class="element-button" data-type="paragraph" aria-label="Add paragraph">Paragraph</button>
@@ -181,6 +182,8 @@
     <aside id="widget" class="widget" role="complementary" aria-label="MTR Magic Key badge">
         <a href="https://www.mtrmagickey.com"><img src="https://github.com/mtrmagickey/mocking-board/blob/main/mtrmk_badge.png?raw=true" alt="MTR Magic Key"></a>
     </aside>
+
+    <button id="signage-exit-btn" class="signage-exit-btn" type="button" aria-label="Restore controls" aria-hidden="true">Show Controls</button>
 
     <input type="file" id="file-input" style="display: none;">
 
