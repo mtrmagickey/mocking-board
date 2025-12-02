@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const frameAddBtn = document.getElementById('frame-add-btn');
     const frameLabel = document.getElementById('frame-label');
     const frameDurationInput = document.getElementById('frame-duration');
-    const playModeBtn = document.getElementById('play-mode-btn');
+    const playModeBtn = document.getElementById('frame-play-btn');
     const zoomOutBtn = document.getElementById('zoom-out-btn');
     const zoomInBtn = document.getElementById('zoom-in-btn');
     const zoomFitBtn = document.getElementById('zoom-fit-btn');
@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inspectorGradientAnimPauseInput = document.getElementById('inspector-gradient-anim-pause');
     const inspectorGradientAnimSpeedInput = document.getElementById('inspector-gradient-anim-speed');
     const inspectorGradientAnimStatus = document.getElementById('inspector-gradient-anim-status');
+    const inspectorResetButtons = document.querySelectorAll('.inspector-reset-btn');
     const animationsPanel = null;
     const animationsList = null;
     const reduceMotionToggle = null;
@@ -1547,6 +1548,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return editables.length ? Array.from(editables) : [baseEl];
     }
 
+    function resetInspectorProperty(targetKey) {
+        if (!selectedElement) return;
+        const textTargets = getEditableTargets(selectedElement);
+        if (targetKey === 'bg-color') {
+            selectedElement.style.background = '';
+            selectedElement.style.backgroundColor = '';
+        } else if (targetKey === 'text-color') {
+            textTargets.forEach(target => {
+                target.style.color = '';
+            });
+        } else if (targetKey === 'font-family') {
+            textTargets.forEach(target => {
+                target.style.fontFamily = '';
+            });
+        } else if (targetKey === 'font-size') {
+            textTargets.forEach(target => {
+                target.style.fontSize = '';
+            });
+        } else {
+            return;
+        }
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+        updateInspectorPanel();
+    }
+
     const BOOL_ANIMATION_KEYS = new Set([
         'colorAnimActive',
         'colorAnimPause',
@@ -2203,6 +2229,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (typeof saveState === 'function' && canvas) saveState(canvas);
             updateInspectorPanel();
+        });
+    }
+
+    if (inspectorResetButtons && inspectorResetButtons.length) {
+        inspectorResetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!selectedElement) return;
+                const targetKey = btn.dataset.reset;
+                resetInspectorProperty(targetKey);
+            });
         });
     }
 
