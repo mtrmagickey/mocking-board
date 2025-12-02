@@ -19,6 +19,7 @@ h2 {
 }
 .sidebar {
     width: 250px;
+    flex: 0 0 250px;
     color: black;
     padding: 0;
     overflow-y: auto;
@@ -171,6 +172,8 @@ body.signage-mode-active #sidebar {
     transform: translateX(-120%);
     opacity: 0;
     pointer-events: none;
+    width: 0;
+    flex-basis: 0;
 }
 body.signage-mode-active #toolbar {
     transform: translateY(-150%);
