@@ -26,11 +26,6 @@
                 <button class="element-button" data-type="colorTransition" aria-label="Add color transition">Color Transition</button>
                 <button class="element-button" data-type="colorGradient" aria-label="Add color gradient">Color Gradient</button>
             </div>
-            <h2 id="components-heading">Components</h2>
-            <div id="components-panel" role="group" aria-labelledby="components-heading">
-                <button id="save-component-btn" aria-label="Save selection as component">Save Selection as Component</button>
-                <div id="components-list" aria-label="Saved components"></div>
-            </div>
         </nav>
         <main id="canvas-container" class="canvas-container" role="main">
             <div id="canvas" class="canvas" aria-label="Design canvas" tabindex="0">
@@ -83,10 +78,61 @@
                 <button id="group-btn" aria-label="Group selection" title="Group selected elements">Group</button>
                 <button id="ungroup-btn" aria-label="Ungroup selection" title="Ungroup selected group">Ungroup</button>
             </div>
-            <div class="toolbar-group" aria-label="Playback">
-                <button id="play-mode-btn" aria-label="Play storyboard" title="Enter play/preview mode">Play</button>
-            </div>
         </div>
+        <aside id="inspector-panel" class="inspector-panel" aria-label="Selection inspector">
+            <div class="inspector-header">
+                <h3>Inspector</h3>
+                <span id="inspector-target">No selection</span>
+            </div>
+            <div id="inspector-empty-state" class="inspector-empty">Select an element to edit its styles.</div>
+            <div id="inspector-fields" class="inspector-fields" aria-live="polite">
+                <label>Background
+                    <input type="color" id="inspector-bg-color">
+                </label>
+                <label>Text
+                    <input type="color" id="inspector-text-color">
+                </label>
+                <label>Font Family
+                    <select id="inspector-font-family">
+                        <option value="">Default</option>
+                        <option value="Roboto, sans-serif">Roboto</option>
+                        <option value="Old Standard TT, serif">Old Standard</option>
+                        <option value="Georgia, serif">Georgia</option>
+                        <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
+                    </select>
+                </label>
+                <label>Font Size (px)
+                    <input type="number" id="inspector-font-size" min="8" max="120" step="1">
+                </label>
+                <div class="inspector-section">
+                    <h4>Animation Controls</h4>
+                    <div class="inspector-subsection">
+                        <div class="inspector-subheader">
+                            <span>Color Transition</span>
+                            <span id="inspector-color-anim-status" class="anim-status">Inactive</span>
+                        </div>
+                        <label class="inline">
+                            <input type="checkbox" id="inspector-color-anim-pause"> Pause
+                        </label>
+                        <label>Speed (ms)
+                            <input type="number" id="inspector-color-anim-speed" min="200" max="10000" step="100">
+                        </label>
+                    </div>
+                    <div class="inspector-subsection">
+                        <div class="inspector-subheader">
+                            <span>Gradient Animation</span>
+                            <span id="inspector-gradient-anim-status" class="anim-status">Inactive</span>
+                        </div>
+                        <label class="inline">
+                            <input type="checkbox" id="inspector-gradient-anim-pause"> Pause
+                        </label>
+                        <label>Speed (ms)
+                            <input type="number" id="inspector-gradient-anim-speed" min="20" max="1000" step="10">
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <div id="contextMenu" class="context-menu" role="menu" aria-label="Element context menu">
@@ -144,6 +190,7 @@
         <input type="color" id="end-color">
         <label for="transition-time">Transition Time (seconds):</label>
         <input type="number" id="transition-time" min="1" value="5">
+        <div class="color-preview" id="color-transition-preview" aria-hidden="true"></div>
         <button id="apply-transition-btn">Apply</button>
         <button class="cancel-btn" onclick="document.getElementById('color-transition-popup').style.display='none'">Cancel</button>
     </div>
@@ -160,6 +207,7 @@
             <option value="to bottom">To Bottom</option>
             <option value="to top">To Top</option>
         </select>
+        <div class="color-preview" id="color-gradient-preview" aria-hidden="true"></div>
         <button id="apply-gradient-btn">Apply</button>
         <button class="cancel-btn" onclick="document.getElementById('color-gradient-popup').style.display='none'">Cancel</button>
     </div>

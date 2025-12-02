@@ -36,8 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const frameAddBtn = document.getElementById('frame-add-btn');
     const frameLabel = document.getElementById('frame-label');
     const frameDurationInput = document.getElementById('frame-duration');
-    const saveComponentBtn = document.getElementById('save-component-btn');
-    const componentsList = document.getElementById('components-list');
     const playModeBtn = document.getElementById('play-mode-btn');
     const zoomOutBtn = document.getElementById('zoom-out-btn');
     const zoomInBtn = document.getElementById('zoom-in-btn');
@@ -45,6 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLabel = document.getElementById('zoom-label');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
+    const inspectorPanel = document.getElementById('inspector-panel');
+    const inspectorTargetLabel = document.getElementById('inspector-target');
+    const inspectorBgColorInput = document.getElementById('inspector-bg-color');
+    const inspectorTextColorInput = document.getElementById('inspector-text-color');
+    const inspectorFontFamilySelect = document.getElementById('inspector-font-family');
+    const inspectorFontSizeInput = document.getElementById('inspector-font-size');
+    const inspectorColorAnimPauseInput = document.getElementById('inspector-color-anim-pause');
+    const inspectorColorAnimSpeedInput = document.getElementById('inspector-color-anim-speed');
+    const inspectorColorAnimStatus = document.getElementById('inspector-color-anim-status');
+    const inspectorGradientAnimPauseInput = document.getElementById('inspector-gradient-anim-pause');
+    const inspectorGradientAnimSpeedInput = document.getElementById('inspector-gradient-anim-speed');
+    const inspectorGradientAnimStatus = document.getElementById('inspector-gradient-anim-status');
     const animationsPanel = null;
     const animationsList = null;
     const reduceMotionToggle = null;
@@ -80,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startColorInput = document.getElementById('start-color');
     const endColorInput = document.getElementById('end-color');
     const transitionTimeInput = document.getElementById('transition-time');
+    const colorTransitionPreview = document.getElementById('color-transition-preview');
     const applyTransitionBtn = document.getElementById('apply-transition-btn');
 
     const mediaPopup = document.getElementById('media-popup');
@@ -93,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startGradientColorInput = document.getElementById('start-gradient-color');
     const endGradientColorInput = document.getElementById('end-gradient-color');
     const gradientDirectionSelect = document.getElementById('gradient-direction');
+    const colorGradientPreview = document.getElementById('color-gradient-preview');
     const applyGradientBtn = document.getElementById('apply-gradient-btn');
 
     // Inline text toolbar (created dynamically)
@@ -176,6 +188,62 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateColorTransitionPreview() {
+        if (!colorTransitionPreview) return;
+        const start = startColorInput ? startColorInput.value || '#F5C919' : '#F5C919';
+        const end = endColorInput ? endColorInput.value || '#FFF9E5' : '#FFF9E5';
+        colorTransitionPreview.style.background = `linear-gradient(135deg, ${start}, ${end})`;
+        const seconds = parseFloat(transitionTimeInput && transitionTimeInput.value) || 1;
+        colorTransitionPreview.title = `Transition over ${seconds.toFixed(1)}s`;
+    }
+
+    function updateColorGradientPreview() {
+        if (!colorGradientPreview) return;
+        const start = startGradientColorInput ? startGradientColorInput.value || '#F5C919' : '#F5C919';
+        const end = endGradientColorInput ? endGradientColorInput.value || '#FFF9E5' : '#FFF9E5';
+        const direction = gradientDirectionSelect ? gradientDirectionSelect.value || 'to right' : 'to right';
+        const type = gradientTypeSelect ? gradientTypeSelect.value || 'linear' : 'linear';
+        let gradient = '';
+        if (type === 'radial') {
+            gradient = `radial-gradient(circle, ${start}, ${end})`;
+        } else if (type === 'conic') {
+            gradient = `conic-gradient(from 0deg, ${start}, ${end})`;
+        } else {
+            gradient = `linear-gradient(${direction}, ${start}, ${end})`;
+        }
+        colorGradientPreview.style.background = gradient;
+        const animStyle = gradientAnimSelect ? gradientAnimSelect.value : 'none';
+        const animLabel = animStyle === 'rotate' ? 'Rotating' : animStyle === 'color-shift' ? 'Color shift' : 'Static';
+        colorGradientPreview.title = `${type} gradient (${animLabel})`;
+    }
+
+    const transitionPreviewInputs = [startColorInput, endColorInput, transitionTimeInput];
+    transitionPreviewInputs.forEach(input => {
+        if (!input) return;
+        const eventName = input.type === 'number' ? 'input' : 'input';
+        input.addEventListener(eventName, updateColorTransitionPreview);
+    });
+
+    const gradientPreviewInputs = [startGradientColorInput, endGradientColorInput, gradientDirectionSelect];
+    gradientPreviewInputs.forEach(input => {
+        if (!input) return;
+        input.addEventListener('input', updateColorGradientPreview);
+        input.addEventListener('change', updateColorGradientPreview);
+    });
+    if (gradientTypeSelect) {
+        gradientTypeSelect.addEventListener('change', updateColorGradientPreview);
+    }
+    if (gradientAnimSelect) {
+        gradientAnimSelect.addEventListener('change', updateColorGradientPreview);
+    }
+
+    updateColorTransitionPreview();
+    updateColorGradientPreview();
+
+    if (inspectorPanel) {
+        inspectorPanel.classList.add('no-selection');
+    }
+
     let draggedElement = null;
     let offset = { x: 0, y: 0 };
     let selectedElement = null;
@@ -192,11 +260,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let marqueeStart = null;
     let hGuide = null;
     let vGuide = null;
+    let inspectorObserver = null;
 
     // --- Multi-frame / storyboard state ---
     let frames = [];
     let currentFrameIndex = 0;
-    let components = [];
     let savedProjectThemeIndex = null;
     let isPlayMode = false;
     let playModeIntervalId = null;
@@ -242,8 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
             body: 'Right-click any element for options like color, gradient, motion, and media. Use the inline text toolbar to style headings and body copy.',
         },
         {
-            title: 'Components and Undo',
-            body: 'Save frequently used groups as components from the sidebar, and lean on Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) while experimenting.',
+            title: 'Undo and Redo',
+            body: 'Lean on Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) while experimenting so it feels safe to try bold ideas.',
         }
     ];
     let onboardingIndex = 0;
@@ -905,92 +973,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function getSelectedElementsSnapshot() {
-        const selectedEls = Array.from(canvas.querySelectorAll('.element.element--selected'));
-        if (!selectedEls.length) return null;
-        return selectedEls.map(el => ({
-            type: el.getAttribute('data-type') || null,
-            left: el.style.left,
-            top: el.style.top,
-            width: el.style.width,
-            height: el.style.height,
-            backgroundColor: el.style.backgroundColor,
-            color: el.style.color,
-            fontSize: el.style.fontSize,
-            fontFamily: el.style.fontFamily,
-            zIndex: el.style.zIndex,
-            border: el.style.border,
-            borderColor: el.style.borderColor,
-            rotation: el.dataset.rotation || 0,
-            innerHTML: el.innerHTML,
-            dataset: { ...el.dataset },
-        }));
-    }
-
-    function renderComponentsList() {
-        if (!componentsList) return;
-        componentsList.innerHTML = '';
-        components.forEach((comp, index) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.textContent = comp.name || `Component ${index + 1}`;
-            btn.addEventListener('click', () => {
-                const offsetX = 20;
-                const offsetY = 20;
-                comp.elements.forEach(elData => {
-                    const element = document.createElement('div');
-                    element.className = 'element svg-container';
-                    const baseLeft = parseInt(elData.left || '0', 10) || 0;
-                    const baseTop = parseInt(elData.top || '0', 10) || 0;
-                    element.style.left = `${baseLeft + offsetX}px`;
-                    element.style.top = `${baseTop + offsetY}px`;
-                    element.style.width = elData.width;
-                    element.style.height = elData.height;
-                    element.style.backgroundColor = elData.backgroundColor;
-                    element.style.color = elData.color;
-                    element.style.fontSize = elData.fontSize;
-                    element.style.fontFamily = elData.fontFamily;
-                    element.style.zIndex = elData.zIndex;
-                    element.style.border = elData.border;
-                    element.style.borderColor = elData.borderColor;
-                    element.innerHTML = elData.innerHTML;
-                    if (elData.dataset) {
-                        Object.keys(elData.dataset).forEach(key => {
-                            element.dataset[key] = elData.dataset[key];
-                        });
-                    }
-                    ensureElementUID(element);
-                    if (elData.rotation) {
-                        element.style.transform = `rotate(${elData.rotation}deg)`;
-                    }
-                    if (!element.querySelector('.resize-handle')) {
-                        const resizeHandle = document.createElement('div');
-                        resizeHandle.className = 'resize-handle';
-                        element.appendChild(resizeHandle);
-                    }
-                    canvas.appendChild(element);
-                    attachElementInteractions(element);
-                });
-                if (typeof saveState === 'function' && canvas) saveState(canvas);
-            });
-            componentsList.appendChild(btn);
-        });
-    }
-
-    if (saveComponentBtn) {
-        saveComponentBtn.addEventListener('click', () => {
-            const elements = getSelectedElementsSnapshot();
-            if (!elements) {
-                alert('Select one or more elements on the canvas first.');
-                return;
-            }
-            const name = prompt('Name this component:', `Component ${components.length + 1}`) || `Component ${components.length + 1}`;
-            components.push({ name, elements });
-            renderComponentsList();
-            if (typeof saveState === 'function' && canvas) saveState(canvas);
-        });
-    }
-
     // Sidebar event delegation for element creation
     sidebar.addEventListener('click', (e) => {
         const button = e.target.closest('.element-button');
@@ -1028,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const element = e.target.closest('.element');
             if (!element || isLocked) return;
             e.preventDefault();
-            selectedElement = element;
+            setSelectedElement(element);
             contextMenu.style.display = 'block';
             contextMenu.style.left = `${e.clientX}px`;
             contextMenu.style.top = `${e.clientY}px`;
@@ -1393,15 +1375,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('pointermove', updateMarquee);
         document.removeEventListener('pointerup', finishMarquee);
         const selectedEls = canvas.querySelectorAll('.element.element--selected');
-        selectedElement = selectedEls.length === 1 ? selectedEls[0] : null;
-        updateBgModeLabel();
+        applySelectionReference(selectedEls.length === 1 ? selectedEls[0] : null);
     }
 
     function startResizing(e) {
         if (isLocked) return;
         e.stopPropagation();
         isResizing = true;
-        selectedElement = e.target.parentElement;
+        applySelectionReference(e.target.parentElement);
         document.addEventListener('pointermove', resize);
         document.addEventListener('pointerup', stopResizing);
     }
@@ -1525,24 +1506,238 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
+    function detachInspectorObserver() {
+        if (inspectorObserver) {
+            inspectorObserver.disconnect();
+            inspectorObserver = null;
+        }
+    }
+
+    function attachInspectorObserver() {
+        detachInspectorObserver();
+        if (!selectedElement || typeof MutationObserver === 'undefined') return;
+        inspectorObserver = new MutationObserver(() => {
+            updateInspectorPanel();
+        });
+        inspectorObserver.observe(selectedElement, { attributes: true, attributeFilter: ['style'], subtree: true });
+    }
+
+    function normalizeHex(color, fallback = '#ffffff') {
+        if (!color || color === 'transparent' || color.includes('gradient')) return fallback;
+        if (color.startsWith('#')) {
+            if (color.length === 4) {
+                return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+            }
+            return color;
+        }
+        if (color.startsWith('rgb')) {
+            const result = color.match(/\d+/g);
+            if (!result || result.length < 3) return fallback;
+            const hex = result.slice(0, 3)
+                .map(val => Math.max(0, Math.min(255, parseInt(val, 10) || 0)).toString(16).padStart(2, '0'))
+                .join('');
+            return `#${hex}`;
+        }
+        return fallback;
+    }
+
+    function getEditableTargets(baseEl) {
+        if (!baseEl) return [];
+        const editables = baseEl.querySelectorAll('.editable');
+        return editables.length ? Array.from(editables) : [baseEl];
+    }
+
+    const BOOL_ANIMATION_KEYS = new Set([
+        'colorAnimActive',
+        'colorAnimPause',
+        'colorAnimReverse',
+        'colorAnimLoop',
+        'gradientAnimActive',
+        'gradientPause',
+        'gradientReverse',
+        'gradientLoop'
+    ]);
+
+    const NUM_ANIMATION_KEYS = new Set([
+        'colorAnimTransitionTime',
+        'colorAnimSpeed',
+        'gradientSpeed'
+    ]);
+
+    function deriveAnimationStateFromDataset(el) {
+        if (!el || !el.dataset) return null;
+        const state = {};
+        let hasData = false;
+        Object.keys(el.dataset).forEach(key => {
+            if (!key.startsWith('colorAnim') && !key.startsWith('gradient')) return;
+            hasData = true;
+            const raw = el.dataset[key];
+            if (BOOL_ANIMATION_KEYS.has(key)) {
+                state[key] = raw === 'true';
+            } else if (NUM_ANIMATION_KEYS.has(key)) {
+                const num = parseFloat(raw);
+                state[key] = isFinite(num) ? num : raw;
+            } else {
+                state[key] = raw;
+            }
+        });
+        return hasData ? state : null;
+    }
+
+    function ensureAnimationStateForElement(el) {
+        if (!el) return null;
+        const uid = getElementUID(el);
+        if (!uid) return null;
+        let state = getElementAnimationState(uid);
+        if (state) return state;
+        const derived = deriveAnimationStateFromDataset(el);
+        if (derived) {
+            setElementAnimationState(uid, derived);
+            return derived;
+        }
+        return null;
+    }
+
+    function resetAnimationInspectorControls() {
+        if (inspectorColorAnimPauseInput) {
+            inspectorColorAnimPauseInput.checked = false;
+            inspectorColorAnimPauseInput.disabled = true;
+        }
+        if (inspectorColorAnimSpeedInput) {
+            inspectorColorAnimSpeedInput.value = '';
+            inspectorColorAnimSpeedInput.disabled = true;
+        }
+        if (inspectorColorAnimStatus) {
+            inspectorColorAnimStatus.textContent = 'Inactive';
+        }
+        if (inspectorGradientAnimPauseInput) {
+            inspectorGradientAnimPauseInput.checked = false;
+            inspectorGradientAnimPauseInput.disabled = true;
+        }
+        if (inspectorGradientAnimSpeedInput) {
+            inspectorGradientAnimSpeedInput.value = '';
+            inspectorGradientAnimSpeedInput.disabled = true;
+        }
+        if (inspectorGradientAnimStatus) {
+            inspectorGradientAnimStatus.textContent = 'Inactive';
+        }
+    }
+
+    function updateAnimationInspectorControls(element, animationState) {
+        if (!element) {
+            resetAnimationInspectorControls();
+            return;
+        }
+        const dataset = element.dataset || {};
+        const colorActive = animationState ? !!animationState.colorAnimActive : dataset.colorAnimActive === 'true';
+        const colorPaused = animationState ? !!animationState.colorAnimPause : dataset.colorAnimPause === 'true';
+        const rawColorSpeed = animationState && animationState.colorAnimSpeed !== undefined
+            ? parseFloat(animationState.colorAnimSpeed)
+            : dataset.colorAnimSpeed
+                ? parseFloat(dataset.colorAnimSpeed)
+                : animationState && animationState.colorAnimTransitionTime
+                    ? parseFloat(animationState.colorAnimTransitionTime) * 1000
+                    : 2000;
+        const colorSpeed = isFinite(rawColorSpeed) ? rawColorSpeed : 2000;
+
+        const gradientActive = animationState ? !!animationState.gradientAnimActive : dataset.gradientAnimActive === 'true';
+        const gradientPaused = animationState ? !!animationState.gradientPause : dataset.gradientPause === 'true';
+        const rawGradientSpeed = animationState && animationState.gradientSpeed !== undefined
+            ? parseFloat(animationState.gradientSpeed)
+            : dataset.gradientSpeed
+                ? parseFloat(dataset.gradientSpeed)
+                : 50;
+        const gradientSpeed = isFinite(rawGradientSpeed) ? rawGradientSpeed : 50;
+
+        if (inspectorColorAnimPauseInput) {
+            inspectorColorAnimPauseInput.disabled = !colorActive;
+            inspectorColorAnimPauseInput.checked = colorActive ? colorPaused : false;
+        }
+        if (inspectorColorAnimSpeedInput) {
+            inspectorColorAnimSpeedInput.disabled = !colorActive;
+            inspectorColorAnimSpeedInput.value = colorActive ? Math.round(colorSpeed) : '';
+        }
+        if (inspectorColorAnimStatus) {
+            inspectorColorAnimStatus.textContent = colorActive ? (colorPaused ? 'Paused' : 'Playing') : 'Inactive';
+        }
+
+        if (inspectorGradientAnimPauseInput) {
+            inspectorGradientAnimPauseInput.disabled = !gradientActive;
+            inspectorGradientAnimPauseInput.checked = gradientActive ? gradientPaused : false;
+        }
+        if (inspectorGradientAnimSpeedInput) {
+            inspectorGradientAnimSpeedInput.disabled = !gradientActive;
+            inspectorGradientAnimSpeedInput.value = gradientActive ? Math.round(Math.max(10, gradientSpeed)) : '';
+        }
+        if (inspectorGradientAnimStatus) {
+            inspectorGradientAnimStatus.textContent = gradientActive ? (gradientPaused ? 'Paused' : 'Playing') : 'Inactive';
+        }
+    }
+
+    function updateInspectorPanel() {
+        if (!inspectorPanel) return;
+        const hasSelection = !!selectedElement;
+        inspectorPanel.classList.toggle('no-selection', !hasSelection);
+        if (!hasSelection) {
+            if (inspectorTargetLabel) inspectorTargetLabel.textContent = 'No selection';
+            if (inspectorFontSizeInput) inspectorFontSizeInput.value = '';
+            resetAnimationInspectorControls();
+            return;
+        }
+        const typeLabel = selectedElement.getAttribute('data-type') || 'Element';
+        if (inspectorTargetLabel) {
+            inspectorTargetLabel.textContent = typeLabel.replace(/^[a-z]/, c => c.toUpperCase());
+        }
+        const baseStyles = window.getComputedStyle(selectedElement);
+        const textTarget = selectedElement.querySelector('.editable') || selectedElement;
+        const textStyles = window.getComputedStyle(textTarget);
+        if (inspectorBgColorInput) {
+            inspectorBgColorInput.value = normalizeHex(baseStyles.backgroundColor, '#ffffff');
+        }
+        if (inspectorTextColorInput) {
+            inspectorTextColorInput.value = normalizeHex(textStyles.color, '#111111');
+        }
+        if (inspectorFontFamilySelect) {
+            const fontFamily = textStyles.fontFamily || '';
+            const normalized = fontFamily.replace(/"/g, '');
+            const match = Array.from(inspectorFontFamilySelect.options).find(opt => opt.value && normalized.startsWith(opt.value.replace(/"/g, '')));
+            inspectorFontFamilySelect.value = match ? match.value : '';
+        }
+        if (inspectorFontSizeInput) {
+            const size = parseInt(textStyles.fontSize, 10);
+            inspectorFontSizeInput.value = isNaN(size) ? '' : size;
+        }
+        const animationState = ensureAnimationStateForElement(selectedElement);
+        updateAnimationInspectorControls(selectedElement, animationState);
+    }
+
+    function applySelectionReference(el) {
+        selectedElement = el || null;
+        if (selectedElement) {
+            attachInspectorObserver();
+        } else {
+            detachInspectorObserver();
+        }
+        updateBgModeLabel();
+        updateInspectorPanel();
+    }
+
     function setSelectedElement(el) {
         if (selectedElement === el) return;
         if (selectedElement) {
             selectedElement.classList.remove('element--selected');
         }
-        selectedElement = el;
-        if (selectedElement) {
-            selectedElement.classList.add('element--selected');
+        if (el) {
+            el.classList.add('element--selected');
         }
-        updateBgModeLabel();
+        applySelectionReference(el || null);
     }
 
     function clearSelection() {
         canvas.querySelectorAll('.element.element--selected').forEach(el => {
             el.classList.remove('element--selected');
         });
-        selectedElement = null;
-        updateBgModeLabel();
+        applySelectionReference(null);
     }
 
     function selectElement(el, additive = false) {
@@ -1555,7 +1750,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             selectedElement = null;
         }
-        updateBgModeLabel();
+        applySelectionReference(selectedElement);
     }
 
     function updateBgModeLabel() {
@@ -1716,7 +1911,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!el.classList.contains('element--selected')) {
                 selectElement(el, false);
             } else {
-                selectedElement = el;
+                applySelectionReference(el);
             }
         }
         contextMenu.style.display = 'block';
@@ -1958,8 +2153,130 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedElement.style.color = event.target.value;
             }
             if (typeof saveState === 'function' && canvas) saveState(canvas);
+            updateInspectorPanel();
         }
     });
+
+    if (inspectorBgColorInput) {
+        inspectorBgColorInput.addEventListener('input', (event) => {
+            if (!selectedElement) return;
+            selectedElement.style.background = '';
+            selectedElement.style.backgroundColor = event.target.value;
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            updateInspectorPanel();
+        });
+    }
+
+    if (inspectorTextColorInput) {
+        inspectorTextColorInput.addEventListener('input', (event) => {
+            if (!selectedElement) return;
+            const targets = getEditableTargets(selectedElement);
+            targets.forEach(target => {
+                target.style.color = event.target.value;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            updateInspectorPanel();
+        });
+    }
+
+    if (inspectorFontFamilySelect) {
+        inspectorFontFamilySelect.addEventListener('change', (event) => {
+            if (!selectedElement) return;
+            const value = event.target.value;
+            const targets = getEditableTargets(selectedElement);
+            targets.forEach(target => {
+                target.style.fontFamily = value;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            updateInspectorPanel();
+        });
+    }
+
+    if (inspectorFontSizeInput) {
+        inspectorFontSizeInput.addEventListener('input', (event) => {
+            if (!selectedElement) return;
+            const size = parseInt(event.target.value, 10);
+            if (!isFinite(size)) return;
+            const targets = getEditableTargets(selectedElement);
+            targets.forEach(target => {
+                target.style.fontSize = `${Math.max(8, Math.min(180, size))}px`;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            updateInspectorPanel();
+        });
+    }
+
+    if (inspectorColorAnimPauseInput) {
+        inspectorColorAnimPauseInput.addEventListener('change', () => {
+            if (!selectedElement) return;
+            const state = ensureAnimationStateForElement(selectedElement);
+            if (!state || !state.colorAnimActive) {
+                inspectorColorAnimPauseInput.checked = false;
+                updateInspectorPanel();
+                return;
+            }
+            updateSelectedAnimationState(next => {
+                next.colorAnimPause = inspectorColorAnimPauseInput.checked;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (inspectorColorAnimSpeedInput) {
+        inspectorColorAnimSpeedInput.addEventListener('change', () => {
+            if (!selectedElement) return;
+            const state = ensureAnimationStateForElement(selectedElement);
+            if (!state || !state.colorAnimActive) {
+                inspectorColorAnimSpeedInput.value = '';
+                updateInspectorPanel();
+                return;
+            }
+            let value = parseInt(inspectorColorAnimSpeedInput.value, 10);
+            if (!isFinite(value)) return;
+            value = Math.max(200, Math.min(10000, value));
+            inspectorColorAnimSpeedInput.value = value;
+            updateSelectedAnimationState(next => {
+                next.colorAnimSpeed = value;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (inspectorGradientAnimPauseInput) {
+        inspectorGradientAnimPauseInput.addEventListener('change', () => {
+            if (!selectedElement) return;
+            const state = ensureAnimationStateForElement(selectedElement);
+            if (!state || !state.gradientAnimActive) {
+                inspectorGradientAnimPauseInput.checked = false;
+                updateInspectorPanel();
+                return;
+            }
+            updateSelectedAnimationState(next => {
+                next.gradientPause = inspectorGradientAnimPauseInput.checked;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (inspectorGradientAnimSpeedInput) {
+        inspectorGradientAnimSpeedInput.addEventListener('change', () => {
+            if (!selectedElement) return;
+            const state = ensureAnimationStateForElement(selectedElement);
+            if (!state || !state.gradientAnimActive) {
+                inspectorGradientAnimSpeedInput.value = '';
+                updateInspectorPanel();
+                return;
+            }
+            let value = parseInt(inspectorGradientAnimSpeedInput.value, 10);
+            if (!isFinite(value)) return;
+            value = Math.max(10, Math.min(1000, value));
+            inspectorGradientAnimSpeedInput.value = value;
+            updateSelectedAnimationState(next => {
+                next.gradientSpeed = value;
+            });
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
 
     document.getElementById('textAlign').addEventListener('click', () => {
         if (selectedElement) {
@@ -2013,6 +2330,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const gradientAnimIntervals = new Map(); // uid -> intervalId
     const elementAnimIntervals = new Map(); // uid -> intervalId (for scale/move/rotate etc)
     let reduceMotion = false;
+
+    function updateSelectedAnimationState(mutator) {
+        if (typeof mutator !== 'function') return;
+        if (!selectedElement) return;
+        const uid = getElementUID(selectedElement);
+        if (!uid) return;
+        const currentState = ensureAnimationStateForElement(selectedElement) || {};
+        const nextState = { ...currentState };
+        mutator(nextState, currentState);
+        setElementAnimationState(uid, nextState);
+        restoreElementAnimation(selectedElement, nextState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
+        updateInspectorPanel();
+    }
 
     // --- Helper: Get UID for an element ---
     function getElementUID(el) {
@@ -2287,12 +2617,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function openColorTransitionPopup() {
         startColorInput.value = '#F5C919';
         endColorInput.value = '#FFF9E5';
+        transitionTimeInput.value = transitionTimeInput.value || 5;
+        updateColorTransitionPreview();
         openPopup(colorTransitionPopup);
     }
     function closeColorTransitionPopup() { closePopup(colorTransitionPopup); }
     function openColorGradientPopup() {
         startGradientColorInput.value = '#F5C919';
         endGradientColorInput.value = '#FFF9E5';
+        updateColorGradientPreview();
         openPopup(colorGradientPopup);
     }
     function closeColorGradientPopup() { closePopup(colorGradientPopup); }
@@ -2321,7 +2654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Use setDragged, setOffset, setSelected to update local state
     function setDragged(el) { draggedElement = el; }
     function setOffset(val) { offset = val; }
-    function setSelected(el) { selectedElement = el; }
+    function setSelected(el) { setSelectedElement(el); }
 
     // --- FIX: Remove broken setupMediaDrop/setupUnsplashSearch calls before DOMContentLoaded ---
     // (They are already called after DOMContentLoaded with correct arguments)
@@ -2673,13 +3006,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             ? imported.frames
                             : [snapshotCurrentCanvas()];
                         currentFrameIndex = imported.currentFrameIndex || 0;
-                        components = Array.isArray(imported.components) ? imported.components : [];
                         savedProjectThemeIndex = typeof imported.themeIndex === 'number' ? imported.themeIndex : null;
                         loadFrame(currentFrameIndex);
                         if (savedProjectThemeIndex !== null) {
                             applyTheme(savedProjectThemeIndex);
                         }
-                        renderComponentsList();
                         alert('Project loaded!');
                         if (typeof saveState === 'function' && canvas) saveState(canvas);
                     } else if (imported && imported.elements) {
@@ -2749,7 +3080,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 project: true,
                 frames,
                 currentFrameIndex,
-                components,
                 themeIndex: savedProjectThemeIndex,
                 canvasSize: {
                     width: canvas.style.width,
