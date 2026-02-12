@@ -3375,11 +3375,17 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFrameIndex = 0;
             reattachEventListeners();
             updateFrameLabel();
+            restoreElementAnimations();
             if (typeof saveState === 'function' && canvas) saveState(canvas);
 
-            const msg = `Sign created \u2014 ${frames.length} frame(s).`;
+            const msg = `Sign created — ${frames.length} frame(s).`;
             gsAddMsg(msg, 'status');
             gsState = 'done';
+
+            // Auto-enter play mode for multi-frame signs
+            if (frames.length > 1 && typeof enterPlayMode === 'function') {
+                enterPlayMode();
+            }
 
             // Auto close after a beat
             setTimeout(() => {

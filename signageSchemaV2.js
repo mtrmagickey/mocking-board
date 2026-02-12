@@ -30,7 +30,7 @@
 
 // ⚠️  Your deployed Cloudflare Worker URL:
 const DEFAULT_PROXY_URL = 'https://mocking-board-proxy.mocking-board.workers.dev/api/generate';
-export const MODEL = 'gpt-4o-mini'; // cheapest capable model
+export const MODEL = 'gpt-4.1-nano'; // cheapest capable model
 
 export function getProxyUrl() {
     try {
@@ -56,21 +56,22 @@ export function setProxyUrl(url) {
  * These questions help nail down design intent cheaply before
  * the heavier generation pass.
  */
-export const CLARIFY_SYSTEM_PROMPT = `You are the sign-design assistant for Mocking Board, a walk-up digital signage tool.
-The user just told you what sign they need. Ask EXACTLY 3 short clarifying questions to improve the sign.
+export const CLARIFY_SYSTEM_PROMPT = `You are a sign-design assistant. The user described the sign they need. Ask EXACTLY 3 short, specific questions to make a great sign. Don't ask vague questions.
 
-Focus your questions on:
-- What text/content should appear (headline, details, times, names)
-- What mood or visual style they want (bold, elegant, playful, minimal)
-- Where/how it will be displayed (lobby screen, classroom, storefront, portrait/landscape)
+Your 3 questions MUST cover:
+1. CONTENT: What exact text goes on the sign? Names, times, locations, details. Get specifics.
+2. STYLE: What feeling should it evoke? Give 3-4 choices like "bold & modern, warm & inviting, clean & minimal, or fun & colorful?"
+3. CONTEXT: Screen orientation — landscape (TV on wall) or portrait (kiosk/phone)? And roughly how far away will people read it?
+
+Keep questions conversational, short (one sentence each), and easy to answer quickly.
 
 Respond with ONLY this JSON — no markdown, no commentary:
 
 {
   "questions": [
-    "<question 1>",
-    "<question 2>",
-    "<question 3>"
+    "<question about exact content/text>",
+    "<question about style/mood>",
+    "<question about display context>"
   ]
 }`;
 
@@ -79,118 +80,136 @@ Respond with ONLY this JSON — no markdown, no commentary:
  * The model receives the full conversation (initial request +
  * clarifications + user answers) and outputs the v2 signage JSON.
  */
-export const GENERATE_SYSTEM_PROMPT = `You are a signage layout generator for Mocking Board.
-You output ONLY valid JSON — no markdown fences, no commentary, no trailing commas.
+export const GENERATE_SYSTEM_PROMPT = `You are a signage designer. Output ONLY valid JSON, no markdown.
 
-## Schema (v2)
+## MANDATORY VISUAL RULES — FOLLOW ALL OF THESE
+
+Every sign MUST have ALL of these:
+1. A GRADIENT background (2 colors, linear/radial/conic, angled). NEVER use "solid". ALWAYS "gradient".
+2. At least ONE shape element (rect, circle, or triangle) as a colored accent.
+3. At least ONE divider element between text sections.
+4. Giant headline text: 72–140px. Font pairing: "Old Standard TT" for headlines, "Roboto" for body.
+5. High contrast: light on dark OR dark on light.
+6. Maximum 6 elements total. Headlines 2–5 words.
+
+## EFFECTS YOU MUST USE — these make signs look professional
+
+### Text glow (neon effect)
+Add "textShadow" in blockStyle. Examples:
+- Subtle glow: "0 0 20px #F59E0B, 0 0 60px #F59E0B55"
+- Neon: "0 0 10px #ff00ff, 0 0 40px #ff00ff, 0 0 80px #ff00ff55"
+- Sharp: "2px 2px 4px rgba(0,0,0,0.5)"
+USE textShadow on EVERY headline.
+
+### Uppercase spaced-out headers
+Add "textTransform": "uppercase" and "letterSpacing": "0.15em" to headline blockStyle for dramatic effect.
+
+### Shape effects
+Shapes support these style properties:
+- "boxShadow": "0 4px 30px rgba(0,0,0,0.3)" — floating shadow depth
+- "borderRadius": "50%" for pill/rounded, "12px" for rounded rect
+- "opacity": 0.0-1.0 — translucent overlays
+- "backdropFilter": "blur(16px)" — glassmorphism (frosted glass)
+- "filter": "blur(8px)" — soft glow, diffused shapes
+
+### Animation (optional, use on 1-2 elements max)
+Add "animation" object to any element:
+- { "type": "pulse", "speed": 2000 } — gentle breathing scale
+- { "type": "gradient-rotate", "startColor": "#hex", "endColor": "#hex", "speed": 50 } — spinning gradient
+- { "type": "gradient-shift", "startColor": "#hex", "endColor": "#hex", "speed": 80 } — color morphing
+- { "type": "color-transition", "startColor": "#hex", "endColor": "#hex", "speed": 1500 } — bg color toggle
+
+### Background options
+- Linear: "direction": "135deg" (angled), "to bottom" (vertical), "to right" (horizontal)
+- Radial: "type": "radial" — spotlight/circular effect
+- Conic: "type": "conic" — starburst effect
+- Overlay: add "overlay": {"color": "#000000", "opacity": 0.3} for dark tint
+
+### Multi-frame slideshows
+For complex signs, use 2-3 frames. Each frame gets its own background, layout, and elements. Frames auto-cycle.
+
+## ELEMENT TYPES
+
+- **text**: "runs":[{"text":"..."}], "blockStyle": { fontFamily, fontSize, fontWeight, color, align, lineHeight, textShadow, letterSpacing, textTransform, opacity }
+- **shape**: "shape": "rect"|"circle"|"triangle". "style": { color, boxShadow, borderRadius, opacity, backdropFilter, filter }. Great as glowing orbs, accent bars, glass cards.
+- **divider**: "style": { color, thickness (2-4), width ("40%"-"60%") }
+- **spacer**: empty breathing room
+
+## JSON SCHEMA
 
 {
   "version": "2.0",
-  "meta": {
-    "title": "<string, required>",
-    "intent": "quick-signage" | "storyboard" | "announcement" | "wayfinding" | "schedule",
-    "contrast": "high" | "normal",
-    "aspectRatio": "16:9" | "4:3" | "9:16" | "1:1"
-  },
-  "branding": {
-    "orgName": "<string, optional>",
-    "logoUrl": "<valid https URL or empty string>",
-    "palette": "<string, optional — name hint for later theming>"
-  },
+  "meta": { "title": "string", "intent": "quick-signage", "contrast": "high", "aspectRatio": "16:9"|"9:16"|"4:3"|"1:1" },
+  "branding": { "orgName": "", "logoUrl": "", "palette": "" },
   "tokens": {
-    "colors": {
-      "primary":    "<hex>",
-      "secondary":  "<hex>",
-      "accent":     "<hex>",
-      "bg":         "<hex>",
-      "muted":      "<hex>"
-    },
-    "fonts": {
-      "display": "<from: Old Standard TT | Georgia | system-ui | Roboto>",
-      "body":    "<from: system-ui | Roboto | Georgia>"
-    },
-    "spacing": {
-      "sm": <12–24>,
-      "md": <28–56>,
-      "lg": <60–120>
-    }
+    "colors": { "primary":"#hex", "secondary":"#hex", "accent":"#hex", "bg":"#hex", "muted":"#hex" },
+    "fonts": { "display": "Old Standard TT", "body": "Roboto" },
+    "spacing": { "sm": 16, "md": 40, "lg": 80 }
   },
-  "frames": [
-    {
-      "duration": <1–120, seconds>,
-      "transition": { "type": "fade" | "slide" | "cut", "duration": <0.2–2.0> },
-      "background": {
-        "type": "solid" | "gradient",
-        "color": "<hex or $token>",
-        "gradient": {
-          "type": "linear" | "radial" | "conic",
-          "direction": "<CSS direction string>",
-          "stops": [ { "color": "<hex or $token>", "position": <0–100> } ]
-        },
-        "overlay": { "color": "<hex>", "opacity": <0–1> }
-      },
-      "layout": {
-        "type": "stack",
-        "direction": "vertical" | "horizontal",
-        "align": "start" | "center" | "end",
-        "justify": "start" | "center" | "end" | "space-between",
-        "padding": "<$token or number>",
-        "gap": "<$token or number>",
-        "children": ["<element id>", ...]
-      },
-      "elements": [
-        {
-          "id": "<unique string, e.g. el-1>",
-          "type": "text" | "divider" | "image" | "shape" | "spacer",
-          "role": "headline" | "subhead" | "body" | "detail" | "brand" | "accent" | "media" | "spacer" | "footer",
-          "runs": [
-            {
-              "text": "<string>",
-              "style": {
-                "fontSize": <18–180, optional — overrides blockStyle>,
-                "fontWeight": <100–900, optional>,
-                "fontFamily": "<$token ref like $display, optional>",
-                "color": "<hex or $token, optional>"
-              }
-            }
-          ],
-          "blockStyle": {
-            "fontFamily": "<$token ref like $display>",
-            "fontSize": <18–180>,
-            "fontWeight": <100–900>,
-            "color": "<hex or $token>",
-            "align": "left" | "center" | "right",
-            "lineHeight": <0.8–3.0>
-          },
-          "style": {
-            "color": "<hex or $token>",
-            "thickness": <1–12>,
-            "width": "<percentage string like 50%>"
-          },
-          "url": "<valid https URL — for image type>",
-          "alt": "<string — accessibility text for images>",
-          "shape": "rect" | "circle" | "line" | "arrow" | "triangle"
-        }
-      ]
-    }
-  ]
+  "frames": [{
+    "duration": 30,
+    "transition": { "type": "fade", "duration": 0.8 },
+    "background": {
+      "type": "gradient",
+      "gradient": { "type": "linear"|"radial"|"conic", "direction": "135deg", "stops": [{"color":"#hex","position":0},{"color":"#hex","position":100}] },
+      "overlay": { "color": "#000000", "opacity": 0.2 }
+    },
+    "layout": { "type": "stack", "direction": "vertical", "align": "center", "justify": "center", "padding": "$lg", "gap": "$md", "children": ["el-1","el-2"] },
+    "elements": [
+      { "id": "el-1", "type": "text", "role": "headline", "runs": [{"text":"..."}], "blockStyle": { "fontFamily": "$display", "fontSize": 96, "fontWeight": 700, "color": "$primary", "align": "center", "lineHeight": 1.1, "textShadow": "0 0 20px #hex", "textTransform": "uppercase", "letterSpacing": "0.1em" } },
+      { "id": "el-2", "type": "shape", "shape": "circle", "style": { "color": "#hex", "boxShadow": "0 0 40px #hex55", "opacity": 0.6 }, "animation": { "type": "pulse", "speed": 2000 } }
+    ]
+  }]
 }
 
-## Rules
-1. Token references use $ prefix: "$primary", "$display", "$lg".
-2. Font families MUST be from the whitelist: Old Standard TT, Georgia, system-ui, Roboto.
-3. Font sizes are unitless numbers (px implied), clamped 18–180.
-4. Spacing tokens: sm 12–24, md 28–56, lg 60–120.
-5. Colors are 7-char hex (#RRGGBB) or $token references.
-6. Maximum 3 frames per generation.
-7. Maximum 8 elements per frame.
-8. Use roles to convey hierarchy. The layout engine positions elements — you NEVER specify x/y/w/h.
-9. For dividers, only set style.color, style.thickness, style.width.
-10. For spacers, no style needed — the gap handles spacing.
-11. All URLs must be https. No javascript:, data:, or blob: URIs.
-12. Keep text concise and punchy — this is signage, not a document.
-13. Choose high-contrast color pairings. If meta.contrast is "high", ensure WCAG AA (4.5:1) for body text.
-14. Use the user's clarification answers to inform every design choice.`;
+## blockStyle shorthand
+fontFamily: "$display"|"$body". fontSize: 20-140. fontWeight: 400|700. color: "$primary"|"$secondary"|"$accent"|"$muted"|"#hex". align: "center"|"left"|"right". lineHeight: 1.0-1.5. textShadow: CSS string. letterSpacing: CSS string. textTransform: "uppercase"|"none". opacity: 0-1.
+
+## DESIGN RECIPES
+
+**Neon Night**: bg gradient #0a0a1a→#1a0a2e (135deg), white headline with pink neon glow (textShadow: "0 0 10px #ff006688, 0 0 40px #ff006644"), glowing circle shape (opacity:0.3, boxShadow: "0 0 60px #ff0066"), gold divider.
+**Warm Elegant**: bg radial gradient #fef3c7→#fde68a, dark brown text with subtle shadow, rounded rect accent (borderRadius: "8px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)"), thin divider.
+**Frosted Glass**: bg gradient #667eea→#764ba2, glass card shape (backdropFilter: "blur(16px)", opacity: 0.15, borderRadius: "16px"), white uppercase text with letter-spacing, thin white divider.
+**Bold Modern**: bg gradient #1a1a2e→#16213e, white uppercase headline with gold glow, gold accent rect bar, gold divider, pulsing circle accent.
+**Corporate Clean**: bg gradient #f8fafc→#e2e8f0, dark text, blue accent rect with soft shadow, thin gray divider, muted footer.
+
+## FULL EXAMPLE — Neon bar event sign
+
+{
+  "version": "2.0",
+  "meta": { "title": "DJ Night", "intent": "quick-signage", "contrast": "high", "aspectRatio": "16:9" },
+  "branding": { "orgName": "Club Neon", "logoUrl": "", "palette": "neon" },
+  "tokens": {
+    "colors": { "primary": "#FFFFFF", "secondary": "#FF006E", "accent": "#FFD700", "bg": "#0A0A1A", "muted": "#8888AA" },
+    "fonts": { "display": "Old Standard TT", "body": "Roboto" },
+    "spacing": { "sm": 16, "md": 44, "lg": 88 }
+  },
+  "frames": [{
+    "duration": 30,
+    "transition": { "type": "fade", "duration": 0.8 },
+    "background": {
+      "type": "gradient",
+      "gradient": { "type": "linear", "direction": "135deg", "stops": [{"color": "#0A0A1A", "position": 0}, {"color": "#1A0A2E", "position": 100}] }
+    },
+    "layout": { "type": "stack", "direction": "vertical", "align": "center", "justify": "center", "padding": "$lg", "gap": "$md", "children": ["el-1","el-2","el-3","el-4","el-5","el-6"] },
+    "elements": [
+      { "id": "el-1", "type": "shape", "shape": "circle", "style": { "color": "#FF006E", "opacity": 0.25, "boxShadow": "0 0 80px #FF006E66" }, "animation": { "type": "pulse", "speed": 3000 } },
+      { "id": "el-2", "type": "text", "role": "headline", "runs": [{"text": "DJ Night"}], "blockStyle": { "fontFamily": "$display", "fontSize": 120, "fontWeight": 700, "color": "$primary", "align": "center", "lineHeight": 1.05, "textShadow": "0 0 15px #FF006E, 0 0 60px #FF006E55", "textTransform": "uppercase", "letterSpacing": "0.15em" } },
+      { "id": "el-3", "type": "divider", "role": "accent", "style": { "color": "$accent", "thickness": 2, "width": "30%" } },
+      { "id": "el-4", "type": "text", "role": "subhead", "runs": [{"text": "Featuring DJ Pulse"}], "blockStyle": { "fontFamily": "$body", "fontSize": 40, "fontWeight": 400, "color": "$secondary", "align": "center", "lineHeight": 1.2, "letterSpacing": "0.05em" } },
+      { "id": "el-5", "type": "shape", "shape": "rect", "style": { "color": "#FFD700", "opacity": 0.4, "borderRadius": "4px", "boxShadow": "0 0 30px #FFD70044" } },
+      { "id": "el-6", "type": "text", "role": "body", "runs": [{"text": "Saturday 10PM  ·  No Cover Before Midnight"}], "blockStyle": { "fontFamily": "$body", "fontSize": 26, "fontWeight": 400, "color": "$muted", "align": "center", "lineHeight": 1.4 } }
+    ]
+  }]
+}
+
+REMEMBER:
+- ALWAYS use textShadow on headlines for glow effect.
+- ALWAYS use textTransform + letterSpacing on headlines.
+- ALWAYS use boxShadow and/or opacity on shape elements.
+- ALWAYS use gradient backgrounds.
+- ALWAYS include shapes and dividers — NEVER only text elements.
+- Use animation on 1-2 elements for wow factor when the mood is fun/bold/neon.`;
 
 // Legacy alias for backward compat
 export const SIGNAGE_SYSTEM_PROMPT = GENERATE_SYSTEM_PROMPT;
@@ -419,6 +438,8 @@ function sanitizeRun(run, tokenMap) {
 /**
  * Sanitize a blockStyle object.
  */
+const ALLOWED_TEXT_TRANSFORMS = new Set(['uppercase', 'lowercase', 'capitalize', 'none']);
+
 function sanitizeBlockStyle(bs, tokenMap) {
     if (!bs || typeof bs !== 'object') return {};
     const out = {};
@@ -428,6 +449,15 @@ function sanitizeBlockStyle(bs, tokenMap) {
     if (bs.color) out.color = sanitizeColor(bs.color, tokenMap);
     if (bs.align && ALLOWED_TEXT_ALIGNS.has(bs.align)) out.align = bs.align;
     if (bs.lineHeight != null) out.lineHeight = clamp(bs.lineHeight, 0.8, 3.0);
+    // Neon glow / text-shadow
+    if (typeof bs.textShadow === 'string') out.textShadow = bs.textShadow.slice(0, 200);
+    // Letter-spacing
+    if (typeof bs.letterSpacing === 'string') out.letterSpacing = bs.letterSpacing.slice(0, 20);
+    else if (typeof bs.letterSpacing === 'number') out.letterSpacing = `${clamp(bs.letterSpacing, -5, 30)}px`;
+    // Text-transform (uppercase, etc.)
+    if (ALLOWED_TEXT_TRANSFORMS.has(bs.textTransform)) out.textTransform = bs.textTransform;
+    // Per-element opacity
+    if (bs.opacity != null) out.opacity = clamp(bs.opacity, 0, 1);
     return out;
 }
 
@@ -516,6 +546,29 @@ function sanitizeElement(el, tokenMap) {
         out.style = {
             color: sanitizeColor(el.style?.color, tokenMap, '#3498db'),
         };
+        // Floating shadow
+        if (typeof el.style?.boxShadow === 'string') out.style.boxShadow = el.style.boxShadow.slice(0, 200);
+        // Rounded corners
+        if (typeof el.style?.borderRadius === 'string') out.style.borderRadius = el.style.borderRadius.slice(0, 30);
+        else if (typeof el.style?.borderRadius === 'number') out.style.borderRadius = `${clamp(el.style.borderRadius, 0, 999)}px`;
+        // Opacity
+        if (el.style?.opacity != null) out.style.opacity = clamp(el.style.opacity, 0, 1);
+        // Glassmorphism
+        if (typeof el.style?.backdropFilter === 'string') out.style.backdropFilter = el.style.backdropFilter.slice(0, 100);
+        // CSS filter
+        if (typeof el.style?.filter === 'string') out.style.filter = el.style.filter.slice(0, 100);
+    }
+
+    // Animation config (any element type)
+    if (el.animation && typeof el.animation === 'object') {
+        const anim = el.animation;
+        out.animation = {};
+        if (anim.type === 'gradient-rotate' || anim.type === 'gradient-shift' || anim.type === 'color-transition' || anim.type === 'pulse') {
+            out.animation.type = anim.type;
+        }
+        if (typeof anim.speed === 'number') out.animation.speed = clamp(anim.speed, 10, 5000);
+        if (typeof anim.startColor === 'string' && HEX_RE.test(anim.startColor)) out.animation.startColor = anim.startColor;
+        if (typeof anim.endColor === 'string' && HEX_RE.test(anim.endColor)) out.animation.endColor = anim.endColor;
     }
 
     // Spacer — no extra properties needed
@@ -785,10 +838,24 @@ function estimateImageHeight(availableWidth) {
 }
 
 /**
- * Estimate shape height.
+ * Estimate shape height — keep decorative accents small.
+ * Shapes are accent marks, not content blocks.
  */
-function estimateShapeHeight(availableWidth) {
-    return Math.round(availableWidth * 0.3);
+function estimateShapeHeight(availableWidth, shape) {
+    if (shape === 'circle') return Math.min(60, Math.round(availableWidth * 0.06));
+    if (shape === 'rect') return Math.min(12, Math.round(availableWidth * 0.015));
+    if (shape === 'triangle') return Math.min(40, Math.round(availableWidth * 0.04));
+    return Math.min(50, Math.round(availableWidth * 0.05));
+}
+
+/**
+ * Estimate shape cross-axis width — accent shapes shouldn't stretch full width.
+ */
+function estimateShapeCrossSize(availableWidth, shape) {
+    if (shape === 'circle') return Math.min(60, Math.round(availableWidth * 0.06));
+    if (shape === 'rect') return Math.round(availableWidth * 0.25);  // accent bar
+    if (shape === 'triangle') return Math.min(40, Math.round(availableWidth * 0.04));
+    return Math.round(availableWidth * 0.15);
 }
 
 
@@ -837,8 +904,10 @@ export function resolveLayout(frame, canvasWidth, canvasHeight, tokenMap) {
             return { main: isVertical ? h : h, cross: isVertical ? availableCross : h, el: resolved };
         }
         if (el.type === 'shape') {
-            const h = estimateShapeHeight(availableCross);
-            return { main: isVertical ? h : h, cross: isVertical ? availableCross : h, el: resolved };
+            const shape = el.shape || 'rect';
+            const h = estimateShapeHeight(availableCross, shape);
+            const cSize = estimateShapeCrossSize(availableCross, shape);
+            return { main: isVertical ? h : cSize, cross: isVertical ? cSize : h, el: resolved };
         }
         return { main: 50, cross: availableCross, el: resolved };
     });
@@ -912,14 +981,24 @@ function resolveFontFamily(font, tokenMap) {
  */
 export function buildBackgroundCSS(bg) {
     if (!bg) return '#ffffff';
+    let css;
     if (bg.type === 'gradient' && bg.gradient) {
         const g = bg.gradient;
         const stops = g.stops.map(s => `${s.color} ${s.position}%`).join(', ');
-        if (g.type === 'radial') return `radial-gradient(circle, ${stops})`;
-        if (g.type === 'conic') return `conic-gradient(from 0deg, ${stops})`;
-        return `linear-gradient(${g.direction || 'to bottom'}, ${stops})`;
+        if (g.type === 'radial') css = `radial-gradient(circle, ${stops})`;
+        else if (g.type === 'conic') css = `conic-gradient(from 0deg, ${stops})`;
+        else css = `linear-gradient(${g.direction || 'to bottom'}, ${stops})`;
+    } else {
+        css = bg.color || '#ffffff';
     }
-    return bg.color || '#ffffff';
+    // Overlay (dark tint for readability)
+    if (bg.overlay && bg.overlay.opacity > 0) {
+        const oc = bg.overlay.color || '#000000';
+        const oa = bg.overlay.opacity;
+        // Layer overlay on top of the gradient/solid
+        css = `linear-gradient(${oc}${Math.round(oa * 255).toString(16).padStart(2, '0')}, ${oc}${Math.round(oa * 255).toString(16).padStart(2, '0')}), ${css}`;
+    }
+    return css;
 }
 
 /**
@@ -942,7 +1021,7 @@ export function renderElementToDOM(positioned, tokenMap) {
     const defaults = ROLE_DEFAULTS[role] || ROLE_DEFAULTS.body;
 
     const div = document.createElement('div');
-    div.className = 'element';
+    div.className = 'element svg-container';
     div.style.position = 'absolute';
     div.style.left = `${x}px`;
     div.style.top = `${y}px`;
@@ -954,6 +1033,56 @@ export function renderElementToDOM(positioned, tokenMap) {
     div.setAttribute('data-uid', generateUID());
     div.setAttribute('data-v2-id', id);
     div.setAttribute('data-v2-role', role);
+
+    // ── Initialize all dataset attrs for parity with elementCreation.js ──
+    div.dataset.rotation = '0';
+    div.dataset.colorGradient = '';
+    div.dataset.colorTransition = '';
+    div.dataset.gradientType = '';
+    div.dataset.gradientDirection = '';
+    div.dataset.gradientAnimStyle = '';
+    div.dataset.gradientStartColor = '';
+    div.dataset.gradientEndColor = '';
+    div.dataset.gradientAngle = '';
+    div.dataset.gradientPreset = '';
+    div.dataset.gradientActive = 'false';
+    div.dataset.colorAnimActive = 'false';
+    div.dataset.colorAnimType = '';
+    div.dataset.colorAnimInterval = '';
+    div.dataset.gradientSpeed = '';
+    div.dataset.gradientPause = 'false';
+    div.dataset.gradientReverse = 'false';
+    div.dataset.gradientLoop = 'false';
+    div.dataset.gradientStep = '';
+    div.dataset.gradientFrame = '';
+    div.dataset.gradientLastUpdate = '';
+    div.dataset.gradientCustomStops = '';
+    div.dataset.gradientOpacity = '';
+    div.dataset.gradientBlendMode = '';
+    div.dataset.gradientMask = '';
+    div.dataset.gradientClipPath = '';
+    div.dataset.gradientZIndex = '';
+    div.dataset.gradientFilter = '';
+    div.dataset.gradientID = '';
+    div.dataset.gradientUserPreset = '';
+    div.dataset.gradientMeta = '';
+    div.dataset.colorAnimSpeed = '';
+    div.dataset.colorAnimPause = 'false';
+    div.dataset.colorAnimReverse = 'false';
+    div.dataset.colorAnimLoop = 'false';
+    div.dataset.colorAnimStep = '';
+    div.dataset.colorAnimFrame = '';
+    div.dataset.colorAnimLastUpdate = '';
+    div.dataset.colorAnimCustomStops = '';
+    div.dataset.colorAnimOpacity = '';
+    div.dataset.colorAnimBlendMode = '';
+    div.dataset.colorAnimMask = '';
+    div.dataset.colorAnimClipPath = '';
+    div.dataset.colorAnimZIndex = '';
+    div.dataset.colorAnimFilter = '';
+    div.dataset.colorAnimID = '';
+    div.dataset.colorAnimUserPreset = '';
+    div.dataset.colorAnimMeta = '';
 
     if (el.type === 'text') {
         const bs = el.blockStyle || {};
@@ -989,6 +1118,15 @@ export function renderElementToDOM(positioned, tokenMap) {
         });
 
         const tagName = (role === 'headline' || role === 'subhead') ? 'h2' : 'p';
+        // Text-shadow (neon glow)
+        const textShadow = bs.textShadow || '';
+        // Letter-spacing
+        const letterSpacing = bs.letterSpacing || '';
+        // Text-transform (uppercase)
+        const textTransform = bs.textTransform || '';
+        // Per-text opacity
+        if (bs.opacity != null) div.style.opacity = bs.opacity;
+
         div.innerHTML = `<div class="editable" contenteditable="true" style="
             font-size:${fontSize}px;
             font-weight:${fontWeight};
@@ -996,8 +1134,11 @@ export function renderElementToDOM(positioned, tokenMap) {
             color:${color};
             text-align:${textAlign};
             line-height:${lineHeight};
+            ${textShadow ? `text-shadow:${textShadow};` : ''}
+            ${letterSpacing ? `letter-spacing:${letterSpacing};` : ''}
+            ${textTransform ? `text-transform:${textTransform};` : ''}
             margin:0;padding:0;
-        "><${tagName} style="margin:0;padding:0;font-size:inherit;font-weight:inherit;font-family:inherit;color:inherit;line-height:inherit;">${html}</${tagName}></div>`;
+        "><div class="text-format-toolbar"></div><${tagName} style="margin:0;padding:0;font-size:inherit;font-weight:inherit;font-family:inherit;color:inherit;line-height:inherit;text-shadow:inherit;letter-spacing:inherit;text-transform:inherit;">${html}</${tagName}></div>`;
     }
 
     else if (el.type === 'divider') {
@@ -1037,6 +1178,32 @@ export function renderElementToDOM(positioned, tokenMap) {
         const shape = el.shape || 'rect';
         const color = el.style?.color || '#3498db';
         div.setAttribute('data-type', shape);
+        // Glassmorphism
+        if (el.style?.backdropFilter) {
+            div.style.backdropFilter = el.style.backdropFilter;
+            div.style.webkitBackdropFilter = el.style.backdropFilter;
+            div.style.backgroundColor = el.style?.opacity != null
+                ? `${color}${Math.round(el.style.opacity * 255).toString(16).padStart(2, '0')}`
+                : color;
+        }
+        // Floating shadow
+        if (el.style?.boxShadow) {
+            div.style.boxShadow = el.style.boxShadow;
+        }
+        // Border-radius (rounded shapes / pill)
+        if (el.style?.borderRadius) {
+            div.style.borderRadius = el.style.borderRadius;
+        }
+        // Opacity
+        if (el.style?.opacity != null && !el.style?.backdropFilter) {
+            div.style.opacity = el.style.opacity;
+        }
+        // CSS filter (blur, brightness, etc.)
+        if (el.style?.filter) {
+            div.style.filter = el.style.filter;
+        }
+        // Overflow hidden for rounded SVG clipping
+        div.style.overflow = 'hidden';
         if (shape === 'rect') {
             div.innerHTML = `<svg width="100%" height="100%"><rect width="100%" height="100%" fill="${color}"></rect></svg>`;
         } else if (shape === 'circle') {
@@ -1055,6 +1222,59 @@ export function renderElementToDOM(positioned, tokenMap) {
         div.style.border = 'none';
         div.style.boxShadow = 'none';
         div.style.pointerEvents = 'none';
+    }
+
+    // ── Animation wiring ──
+    // If the element has an animation config, store it in dataset so
+    // restoreElementAnimations() in main.js can pick it up.
+    if (el.animation && el.animation.type) {
+        const anim = el.animation;
+        if (anim.type === 'gradient-rotate') {
+            div.dataset.gradientActive = 'true';
+            div.dataset.colorGradient = JSON.stringify({
+                startColor: anim.startColor || '#ffffff',
+                endColor: anim.endColor || '#000000',
+                direction: '0',
+                gradientType: 'linear',
+                animStyle: 'rotate',
+            });
+            div.dataset.gradientSpeed = String(anim.speed || 50);
+            div.dataset.gradientAnimStyle = 'rotate';
+            div.dataset.gradientType = 'linear';
+            div.dataset.gradientStartColor = anim.startColor || '#ffffff';
+            div.dataset.gradientEndColor = anim.endColor || '#000000';
+            div.dataset.gradientLoop = 'true';
+        } else if (anim.type === 'gradient-shift') {
+            div.dataset.gradientActive = 'true';
+            div.dataset.colorGradient = JSON.stringify({
+                startColor: anim.startColor || '#ffffff',
+                endColor: anim.endColor || '#000000',
+                direction: '135deg',
+                gradientType: 'linear',
+                animStyle: 'color-shift',
+            });
+            div.dataset.gradientSpeed = String(anim.speed || 80);
+            div.dataset.gradientAnimStyle = 'color-shift';
+            div.dataset.gradientType = 'linear';
+            div.dataset.gradientStartColor = anim.startColor || '#ffffff';
+            div.dataset.gradientEndColor = anim.endColor || '#000000';
+            div.dataset.gradientLoop = 'true';
+        } else if (anim.type === 'color-transition') {
+            div.dataset.colorAnimActive = 'true';
+            div.dataset.colorTransition = JSON.stringify({
+                startColor: anim.startColor || '#ffffff',
+                endColor: anim.endColor || '#000000',
+                transitionTime: (anim.speed || 1000) / 1000,
+            });
+            div.dataset.colorAnimSpeed = String(anim.speed || 1000);
+            div.dataset.colorAnimLoop = 'true';
+        } else if (anim.type === 'pulse') {
+            div.dataset.elementAnimation = JSON.stringify({
+                type: 'scale',
+                preset: 'gentle',
+                duration: (anim.speed || 2000) / 1000,
+            });
+        }
     }
 
     // Resize handle

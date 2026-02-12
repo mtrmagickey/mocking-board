@@ -110,7 +110,7 @@ export default {
 
         // Allowlist only safe fields
         const safeBody = {
-            model: body.model || 'gpt-4o-mini',
+            model: body.model || 'gpt-4.1-nano',
             messages: body.messages,
             temperature: typeof body.temperature === 'number' ? body.temperature : 0.7,
             max_tokens: body.max_tokens,
