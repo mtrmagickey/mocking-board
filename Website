@@ -1,0 +1,89 @@
+<div style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.7; color: #2B2622; padding: 40px; background: linear-gradient(135deg, #fdfcfb 0%, #f5f3f0 100%); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.08);">
+    
+    <!-- Header Section -->
+    <div style="text-align: center; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 1px solid rgba(181, 166, 66, 0.3);">
+        <div style="display: inline-block; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); color: white; padding: 8px 20px; border-radius: 20px; font-size: 0.85em; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px;">Lofi Digital Signage & Storyboarder</div>
+        <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 2.8em; color: #2B2622; margin: 15px 0; font-weight: 400; letter-spacing: -0.5px;">Mocking-Board</h1>
+        <p style="font-size: 1.15em; color: #6B6B6B; max-width: 800px; margin: 0 auto;">Charming, Simple, and Always Editable</p>
+    </div>
+    
+    <!-- Project Summary Card -->
+    <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 4px solid #B5A642;">
+        <h2 style="font-size: 1.3em; color: #2B2622; margin: 0 0 15px 0;">Project Summary</h2>
+        <p style="margin: 0; color: #4A4A4A; font-size: 1.05em;">
+            Mocking-Board is a browser-based visual tool that bridges the gap between <strong>digital signage</strong>, <strong>storyboarding</strong>, and <strong>UI sketching</strong>. It allows users to drag-and-drop text, media, and shapes onto a canvas, arrange them into multi-frame scenes, and play them back as a loop. It delivers the same charming, lofi simplicity as hand-drawn signs but with the power of modern web animation.
+        </p>
+    </div>
+
+    <!-- Key Features (Features & Tools Style) -->
+    <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 4px solid #6B8EAE;">
+        <h2 style="font-size: 1.3em; color: #2B2622; margin: 0 0 20px 0;">Key Features</h2>
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">1</div>
+                <div><strong style="color: #2B2622;">Multi-Frame Storyboarding</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Create multiple frames (scenes) and play them back as a cohesive slideshow or digital signage loop. Perfect for daily announcements or narrative mockups.</span></div>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">2</div>
+                <div><strong style="color: #2B2622;">Instantly Editable</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Everything is live. Click to edit text, drag to move, and right-click for deep context menus. No compiling, no rendering.</span></div>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">3</div>
+                <div><strong style="color: #2B2622;">Rich Media Support</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Embed Images, Videos, Audio, and YouTube links directly onto the canvas. Includes built-in Unsplash integration for instant stock photos.</span></div>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">4</div>
+                <div><strong style="color: #2B2622;">Advanced Color & Animation</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Create dynamic visual interest with animated color transitions, gradients, and element movement commands, all persisted in state.</span></div>
+            </div>
+             <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">5</div>
+                <div><strong style="color: #2B2622;">Grouping & Locking</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Manage complex layouts by grouping elements together or locking them to preventing accidental edits.</span></div>
+            </div>
+             <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">6</div>
+                <div><strong style="color: #2B2622;">Theme System</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Apply curated color themes (Material, Solarized, Nord, etc.) to your entire board instantly for professional-looking consistency.</span></div>
+            </div>
+             <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <div style="min-width: 28px; height: 28px; background: linear-gradient(135deg, #B5A642 0%, #8B7D32 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;">7</div>
+                <div><strong style="color: #2B2622;">Local-First Archictecture</strong><br><span style="color: #5A5A5A; font-size: 0.95em;">Zero server dependency. Save your work as local JSON files. Your data never leaves your device unless you share it.</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Implementation (Technology Stack Grid) -->
+    <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 4px solid #5A8F7B;">
+        <h2 style="font-size: 1.3em; color: #2B2622; margin: 0 0 20px 0;">Implementation</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+            <div style="background: #f8f9fa; padding: 15px 18px; border-radius: 8px;">
+                <strong style="color: #2B2622; font-size: 0.9em;">Native ES Modules</strong><br><span style="color: #6B6B6B; font-size: 0.85em;">Modern Vanilla JavaScript using ESM imports/exports. No bundlers, no compilers, no `npm install` needed to run.</span>
+            </div>
+            <div style="background: #f8f9fa; padding: 15px 18px; border-radius: 8px;">
+                <strong style="color: #2B2622; font-size: 0.9em;">State Management</strong><br><span style="color: #6B6B6B; font-size: 0.85em;">Robust undo/redo stack that tracks complex element states, animations, and group relationships by unique ID (UID).</span>
+            </div>
+            <div style="background: #f8f9fa; padding: 15px 18px; border-radius: 8px;">
+                <strong style="color: #2B2622; font-size: 0.9em;">Modular Interaction Engine</strong><br><span style="color: #6B6B6B; font-size: 0.85em;">Separated logic for dragging (`dragResizeManager.js`), events (`eventHandlers.js`), and color loops (`colorAnimationUtils.js`).</span>
+            </div>
+            <div style="background: #f8f9fa; padding: 15px 18px; border-radius: 8px;">
+                <strong style="color: #2B2622; font-size: 0.9em;">Touch & Pointer</strong><br><span style="color: #6B6B6B; font-size: 0.85em;">Unified event handling for seamless drag-and-drop on desktops, tablets, and touch screens.</span>
+            </div>
+             <div style="background: #f8f9fa; padding: 15px 18px; border-radius: 8px;">
+                <strong style="color: #2B2622; font-size: 0.9em;">JSON Serialization</strong><br><span style="color: #6B6B6B; font-size: 0.85em;">Full scene persistence including frame duration, grid settings, and individual element properties.</span>
+            </div>
+        </div>
+    </div>
+    
+     <!-- Outcome -->
+    <div style="background: white; border-radius: 12px; padding: 30px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 4px solid #5A8F7B;">
+        <h2 style="font-size: 1.3em; color: #2B2622; margin: 0 0 15px 0;">Outcome</h2>
+        <ul style="margin: 0; padding-left: 20px; color: #4A4A4A; font-size: 1.05em; line-height: 1.6;">
+             <li style="margin-bottom: 12px;"><strong>Versatile Mockup Tool:</strong> Capable of handling everything from quick UI wireframes to full digital signage loops in a lobby.</li>
+             <li style="margin-bottom: 12px;"><strong>Zero Barrier to Entry:</strong> Runs on any device with a browser. Ideal for education, pop-up events, and non-technical teams.</li>
+             <li style="margin-bottom: 12px;"><strong>Highly Maintainable:</strong> Clean, modular, standards-compliant JavaScript makes it easy to extend with new element types or features without dependency hell.</li>
+        </ul>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding-top: 20px; border-top: 1px solid rgba(181, 166, 66, 0.2); font-size: 0.9em; color: #8C8C8C; text-align: center;">
+        <strong>Free. Forever. Open Source.</strong>
+    </div>
+</div>
