@@ -1,0 +1,15 @@
+name = "mocking-board-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Deploy: wrangler deploy
+# Dev:    wrangler dev
+#
+# Secrets (set with `wrangler secret put <NAME>`):
+#   OPENAI_API_KEY — your OpenAI API key
+#
+# Optional environment variables:
+# [vars]
+# ALLOWED_ORIGIN = "https://yourdomain.com"
+# MAX_TOKENS = "2048"
+# RATE_LIMIT_RPM = "20"

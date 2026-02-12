@@ -63,6 +63,7 @@
                 <button id="clear-btn" aria-label="Clear canvas" title="Clear canvas">Clear</button>
                 <button id="export-btn" aria-label="Export project" title="Export current layout as JSON">Export</button>
                 <button id="templates-btn" aria-label="New from template" title="Start from a predefined layout">Templates</button>
+                <button id="generate-sign-btn" aria-label="Generate sign with AI" title="Generate signage with AI">Generate</button>
             </div>
             <div class="toolbar-group" aria-label="View">
                 <button id="toggle-sidebar-btn" aria-label="Toggle sidebar" title="Show or hide element sidebar">Sidebar</button>
@@ -177,6 +178,24 @@
         <input type="number" id="animation-duration" min="1" value="5">
         <button id="apply-animation-btn">Apply</button>
         <button class="cancel-btn" onclick="document.getElementById('animation-popup').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="generate-sign-panel" class="gs-panel" role="dialog" aria-modal="true" aria-labelledby="gs-panel-title" style="display:none;">
+        <div class="gs-panel-header">
+            <h3 id="gs-panel-title">Generate Sign</h3>
+            <button id="gs-close-btn" class="gs-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div id="gs-chat" class="gs-chat" aria-live="polite" aria-relevant="additions">
+            <div class="gs-msg gs-msg--ai">
+                <p>Describe the sign you need — type or tap the mic to speak.</p>
+            </div>
+        </div>
+        <div class="gs-input-row">
+            <button id="gs-mic-btn" class="gs-mic-btn" aria-label="Voice input" title="Hold to speak">🎤</button>
+            <input id="gs-input" type="text" placeholder="e.g. A welcome sign for our school open house" autocomplete="off" aria-label="Describe your sign">
+            <button id="gs-send-btn" class="gs-send-btn" aria-label="Send">→</button>
+        </div>
+        <div id="gs-status" class="gs-status"></div>
     </div>
 
     <aside id="widget" class="widget" role="complementary" aria-label="MTR Magic Key badge">

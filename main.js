@@ -4,6 +4,7 @@ import { hexToRgba, rgbToHex, getRandomColor, startColorTransitionAnimation, sta
 import { openPopup, closePopup, setupPopupEvents } from './popupManager.js';
 import { startDragging, startResizing } from './dragResizeManager.js';
 import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
+import { CLARIFY_SYSTEM_PROMPT, GENERATE_SYSTEM_PROMPT, importSignageV2, getProxyUrl, MODEL } from './signageSchemaV2.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Global palette (Bright Amber / Black / Grey Olive / Old Gold / Olive Bark) ---
@@ -3098,4 +3099,401 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
+
+    // ═══════════════════════════════════════════════════════════════
+    // GENERATE SIGN (AI) — conversational 2-pass flow
+    // ═══════════════════════════════════════════════════════════════
+
+    const gsPanel     = document.getElementById('generate-sign-panel');
+    const gsChat      = document.getElementById('gs-chat');
+    const gsInput     = document.getElementById('gs-input');
+    const gsSendBtn   = document.getElementById('gs-send-btn');
+    const gsMicBtn    = document.getElementById('gs-mic-btn');
+    const gsCloseBtn  = document.getElementById('gs-close-btn');
+    const gsStatus    = document.getElementById('gs-status');
+    const generateSignBtn = document.getElementById('generate-sign-btn');
+
+    // Conversation state machine: idle → describing → clarifying → generating → done
+    let gsState = 'idle';
+    let gsUserDescription = '';
+    let gsClarifyQuestions = [];
+    let gsClarifyAnswers = [];
+
+    // ── Helpers ──
+
+    function gsAddMsg(text, role = 'ai') {
+        if (!gsChat) return;
+        const div = document.createElement('div');
+        div.className = `gs-msg gs-msg--${role}`;
+        if (role === 'status') {
+            div.textContent = text;
+        } else {
+            const p = document.createElement('p');
+            p.textContent = text;
+            div.appendChild(p);
+        }
+        gsChat.appendChild(div);
+        gsChat.scrollTop = gsChat.scrollHeight;
+        return div;
+    }
+
+    function gsAddLoading() {
+        const div = document.createElement('div');
+        div.className = 'gs-msg gs-msg--ai gs-loading-msg';
+        div.innerHTML = '<div class="gs-loading"><span></span><span></span><span></span></div>';
+        gsChat?.appendChild(div);
+        gsChat.scrollTop = gsChat.scrollHeight;
+        return div;
+    }
+
+    function gsRemoveLoading() {
+        gsChat?.querySelector('.gs-loading-msg')?.remove();
+    }
+
+    function gsSetInputEnabled(enabled) {
+        if (gsInput) gsInput.disabled = !enabled;
+        if (gsSendBtn) gsSendBtn.disabled = !enabled;
+    }
+
+    function gsReset() {
+        gsState = 'idle';
+        gsUserDescription = '';
+        gsClarifyQuestions = [];
+        gsClarifyAnswers = [];
+        if (gsChat) {
+            gsChat.innerHTML = '';
+            gsAddMsg('Describe the sign you need \u2014 type or tap the mic to speak.');
+        }
+        gsSetInputEnabled(true);
+        if (gsInput) { gsInput.value = ''; gsInput.placeholder = 'e.g. A welcome sign for our school open house'; }
+        if (gsStatus) gsStatus.textContent = '';
+    }
+
+    // ── API call through proxy ──
+
+    async function gsCallAPI(messages) {
+        const proxyUrl = getProxyUrl();
+        const resp = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: MODEL,
+                temperature: 0.7,
+                max_tokens: 2048,
+                messages,
+            }),
+        });
+        if (!resp.ok) {
+            const errText = await resp.text();
+            throw new Error(`API ${resp.status}: ${errText.slice(0, 200)}`);
+        }
+        const data = await resp.json();
+        // Support both proxy-forwarded OpenAI shape and raw content
+        const content = data.choices?.[0]?.message?.content || data.content || '';
+        return content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    }
+
+    // ── Pass 1: Send description, get clarifying questions ──
+
+    async function gsPass1(description) {
+        gsState = 'clarifying';
+        gsUserDescription = description;
+        gsAddMsg(description, 'user');
+        gsSetInputEnabled(false);
+        const loadingEl = gsAddLoading();
+
+        try {
+            const raw = await gsCallAPI([
+                { role: 'system', content: CLARIFY_SYSTEM_PROMPT },
+                { role: 'user',   content: description },
+            ]);
+
+            gsRemoveLoading();
+            let parsed;
+            try { parsed = JSON.parse(raw); } catch { throw new Error('Couldn\u2019t understand the response. Try again.'); }
+
+            gsClarifyQuestions = Array.isArray(parsed.questions) ? parsed.questions.slice(0, 3) : [];
+            if (gsClarifyQuestions.length === 0) throw new Error('No questions received. Try again.');
+
+            gsClarifyAnswers = new Array(gsClarifyQuestions.length).fill('');
+            gsRenderQuestions();
+
+        } catch (err) {
+            gsRemoveLoading();
+            gsAddMsg('Error: ' + err.message, 'status');
+            gsState = 'idle';
+            gsSetInputEnabled(true);
+        }
+    }
+
+    // ── Render clarifying questions as interactive form ──
+
+    function gsRenderQuestions() {
+        const container = document.createElement('div');
+        container.className = 'gs-msg gs-msg--ai';
+
+        const intro = document.createElement('p');
+        intro.textContent = 'A few quick questions to nail the design:';
+        container.appendChild(intro);
+
+        const qDiv = document.createElement('div');
+        qDiv.className = 'gs-questions';
+
+        gsClarifyQuestions.forEach((q, idx) => {
+            const label = document.createElement('label');
+            label.className = 'gs-q-btn';
+            label.textContent = `${idx + 1}. ${q}`;
+            qDiv.appendChild(label);
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'gs-q-answer-input';
+            input.placeholder = 'Your answer\u2026';
+            input.dataset.qidx = idx;
+            input.addEventListener('input', () => {
+                gsClarifyAnswers[idx] = input.value;
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Focus next unanswered, or submit if last
+                    const nextInput = qDiv.querySelector(`input[data-qidx="${idx + 1}"]`);
+                    if (nextInput) nextInput.focus();
+                    else gsSubmitAnswers();
+                }
+            });
+            qDiv.appendChild(input);
+        });
+
+        container.appendChild(qDiv);
+
+        const submitRow = document.createElement('div');
+        submitRow.className = 'gs-q-submit-row';
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'gs-q-submit-btn';
+        submitBtn.textContent = 'Make My Sign';
+        submitBtn.addEventListener('click', gsSubmitAnswers);
+        submitRow.appendChild(submitBtn);
+        container.appendChild(submitRow);
+
+        gsChat?.appendChild(container);
+        gsChat.scrollTop = gsChat.scrollHeight;
+
+        // Focus first answer
+        const firstInput = qDiv.querySelector('input');
+        if (firstInput) setTimeout(() => firstInput.focus(), 100);
+    }
+
+    // ── Pass 2: Send everything, generate the sign ──
+
+    async function gsSubmitAnswers() {
+        // Check that at least one answer is non-empty
+        const hasAny = gsClarifyAnswers.some(a => a.trim());
+        if (!hasAny) {
+            gsAddMsg('Please answer at least one question.', 'status');
+            return;
+        }
+
+        gsState = 'generating';
+        // Disable all question inputs
+        gsChat?.querySelectorAll('.gs-q-answer-input').forEach(inp => { inp.disabled = true; });
+        gsChat?.querySelectorAll('.gs-q-submit-btn').forEach(btn => { btn.disabled = true; });
+
+        // Build answers summary as user message
+        const answerLines = gsClarifyQuestions.map((q, i) => {
+            const a = (gsClarifyAnswers[i] || '').trim() || '(no answer)';
+            return `Q: ${q}\nA: ${a}`;
+        }).join('\n\n');
+
+        gsAddMsg(answerLines, 'user');
+        const loadingEl = gsAddLoading();
+
+        try {
+            const raw = await gsCallAPI([
+                { role: 'system',    content: GENERATE_SYSTEM_PROMPT },
+                { role: 'user',      content: gsUserDescription },
+                { role: 'assistant', content: `I have some clarifying questions:\n${gsClarifyQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` },
+                { role: 'user',      content: answerLines },
+            ]);
+
+            gsRemoveLoading();
+
+            // Import via the v2 pipeline
+            const canvasRect = canvas.getBoundingClientRect();
+            const result = importSignageV2(raw, canvasRect.width || 1920, canvasRect.height || 1080);
+
+            if (!result.success) {
+                gsAddMsg('Generation failed: ' + (result.errors.join('; ') || 'Invalid output. Try again.'), 'status');
+                gsState = 'idle';
+                gsSetInputEnabled(true);
+                return;
+            }
+
+            // Apply to canvas — replace current frames
+            frames = [];
+            result.frames.forEach((renderedFrame, idx) => {
+                if (idx === 0) {
+                    canvas.innerHTML = '<div id="grid" class="grid"></div>';
+                    canvas.style.background = renderedFrame.background;
+                }
+
+                const frameElements = renderedFrame.domElements.map(domEl => {
+                    if (idx === 0) {
+                        canvas.appendChild(domEl);
+                        attachElementInteractions(domEl);
+                    }
+                    return {
+                        type: domEl.getAttribute('data-type'),
+                        left: domEl.style.left,
+                        top: domEl.style.top,
+                        width: domEl.style.width,
+                        height: domEl.style.height,
+                        backgroundColor: domEl.style.backgroundColor,
+                        color: domEl.style.color,
+                        fontSize: domEl.style.fontSize,
+                        fontFamily: domEl.style.fontFamily,
+                        zIndex: domEl.style.zIndex || '2',
+                        border: domEl.style.border,
+                        borderColor: domEl.style.borderColor,
+                        rotation: 0,
+                        innerHTML: domEl.innerHTML,
+                        dataset: { ...domEl.dataset },
+                    };
+                });
+
+                frames.push({
+                    elements: frameElements,
+                    canvas: {
+                        background: renderedFrame.background,
+                        width: (renderedFrame.canvasWidth || canvasRect.width) + 'px',
+                        height: (renderedFrame.canvasHeight || canvasRect.height) + 'px',
+                    },
+                    duration: renderedFrame.duration || 15,
+                });
+            });
+
+            currentFrameIndex = 0;
+            reattachEventListeners();
+            updateFrameLabel();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+
+            const msg = `Sign created \u2014 ${frames.length} frame(s).`;
+            gsAddMsg(msg, 'status');
+            gsState = 'done';
+
+            // Auto close after a beat
+            setTimeout(() => {
+                if (gsPanel) gsPanel.style.display = 'none';
+                gsReset();
+            }, 1800);
+
+        } catch (err) {
+            gsRemoveLoading();
+            gsAddMsg('Error: ' + (err.message || 'Unknown error'), 'status');
+            gsState = 'idle';
+            gsSetInputEnabled(true);
+        }
+    }
+
+    // ── Send handler (initial description) ──
+
+    function gsSendMessage() {
+        const text = (gsInput?.value || '').trim();
+        if (!text) return;
+        gsInput.value = '';
+
+        if (gsState === 'idle') {
+            gsPass1(text);
+        }
+        // In clarifying state, ignore text input (user answers inline)
+    }
+
+    if (gsSendBtn) gsSendBtn.addEventListener('click', gsSendMessage);
+    if (gsInput) {
+        gsInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); gsSendMessage(); }
+        });
+    }
+
+    // ── Open / Close ──
+
+    if (generateSignBtn) {
+        generateSignBtn.addEventListener('click', () => {
+            if (!gsPanel) return;
+            gsReset();
+            gsPanel.style.display = 'flex';
+            setTimeout(() => gsInput?.focus(), 150);
+        });
+    }
+    if (gsCloseBtn) {
+        gsCloseBtn.addEventListener('click', () => {
+            if (gsPanel) gsPanel.style.display = 'none';
+            gsReset();
+        });
+    }
+
+    // ── Voice input (Web Speech API) ──
+
+    let gsRecognition = null;
+    let gsIsListening = false;
+
+    function gsInitSpeech() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            // No browser support — hide mic button
+            if (gsMicBtn) gsMicBtn.style.display = 'none';
+            return;
+        }
+
+        gsRecognition = new SpeechRecognition();
+        gsRecognition.lang = 'en-US';
+        gsRecognition.interimResults = true;
+        gsRecognition.maxAlternatives = 1;
+
+        gsRecognition.addEventListener('result', (e) => {
+            const transcript = Array.from(e.results)
+                .map(r => r[0].transcript)
+                .join('');
+            if (gsInput) gsInput.value = transcript;
+
+            // If final result, auto-send
+            if (e.results[e.results.length - 1].isFinal) {
+                gsStopListening();
+                gsSendMessage();
+            }
+        });
+
+        gsRecognition.addEventListener('end', () => {
+            gsStopListening();
+        });
+
+        gsRecognition.addEventListener('error', (e) => {
+            gsStopListening();
+            if (e.error !== 'aborted' && e.error !== 'no-speech') {
+                gsAddMsg('Mic error: ' + e.error, 'status');
+            }
+        });
+    }
+
+    function gsStartListening() {
+        if (!gsRecognition || gsIsListening) return;
+        gsIsListening = true;
+        gsMicBtn?.classList.add('gs-mic-active');
+        try { gsRecognition.start(); } catch { /* already started */ }
+    }
+
+    function gsStopListening() {
+        gsIsListening = false;
+        gsMicBtn?.classList.remove('gs-mic-active');
+        try { gsRecognition?.stop(); } catch { /* already stopped */ }
+    }
+
+    if (gsMicBtn) {
+        gsMicBtn.addEventListener('click', () => {
+            if (gsIsListening) gsStopListening();
+            else gsStartListening();
+        });
+    }
+
+    gsInitSpeech();
 });
