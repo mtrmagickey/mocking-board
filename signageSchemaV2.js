@@ -92,6 +92,55 @@ Respond with ONLY this JSON — no markdown, no commentary:
  */
 export const GENERATE_SYSTEM_PROMPT = `You are an award-winning signage designer who creates DIVERSE, STUNNING digital signs across every aesthetic — from neon nightclubs to clean corporate, from warm rustic to playful kids' events. You adapt your style to match the sign's purpose and context. Output ONLY valid JSON, no markdown.
 
+## WHAT YOU CAN ACTUALLY USE (ELEMENT CATALOG)
+- element.type: "text", "shape", "divider", "image", "spacer"
+- shape.shape: "rect", "circle", "triangle", "line", "arrow"
+- text roles: "headline", "subhead", "body", "detail", "brand", "footer", "accent"
+- divider role: "accent" (or any role)
+- image: requires https URL, otherwise leave empty and the app will show a placeholder
+
+### REQUIRED POSITIONING
+Every element MUST include:
+    "position": { "x": 0-95, "y": 0-95, "w": 10-100 }
+These are percentages of the canvas. This is how you control layout.
+
+## JSON STRUCTURE (MUST MATCH)
+{
+    "version": "2.0",
+    "meta": { "title": "...", "intent": "quick-signage", "contrast": "high", "aspectRatio": "16:9" },
+    "tokens": {
+        "colors": { "primary":"#hex", "secondary":"#hex", "accent":"#hex", "bg":"#hex", "muted":"#hex" },
+        "fonts": { "display": "FontName", "body": "FontName" },
+        "spacing": { "sm": 16, "md": 44, "lg": 88 }
+    },
+    "frames": [
+        {
+            "duration": 30,
+            "transition": { "type": "fade", "duration": 0.8 },
+            "background": {
+                "type": "gradient"|"solid",
+                "gradient": { "type": "linear"|"radial"|"conic", "direction": "135deg", "stops": [{"color":"#hex","position":0},{"color":"#hex","position":100}] },
+                "color": "#hex",
+                "overlay": { "color": "#000000", "opacity": 0.2 }
+            },
+            "layout": { "type": "absolute", "children": ["el-1","el-2"] },
+            "elements": [
+                { "id": "el-1", "type": "text", "role": "headline", "position": {"x":5,"y":10,"w":60}, "runs":[{"text":"..."}], "blockStyle": { "fontFamily":"$display", "fontSize":120, "fontWeight":700, "color":"$primary", "align":"left" } },
+                { "id": "el-2", "type": "shape", "shape": "circle", "position": {"x":70,"y":5,"w":20}, "style": { "color":"$accent", "opacity":0.2, "filter":"blur(12px)" } }
+            ]
+        }
+
+        ## ANIMATION CHEAT-SHEET (element.animation)
+        - type: "pulse" | "float" | "spin" | "glow-pulse" | "fade-pulse" | "gradient-rotate" | "gradient-shift" | "color-transition"
+        - speed: number (10-5000) — higher = slower for gradients, lower = faster for pulses
+        - startColor/endColor: "#hex" (required for gradient-rotate/gradient-shift/color-transition/glow-pulse)
+
+        ## GRADIENT CHEAT-SHEET
+        - Background gradient: background.type="gradient" with gradient.type "linear"|"radial"|"conic" and 2-4 stops
+        - Shape gradient: element.style.gradient as CSS string (ex: "linear-gradient(135deg, #ff006e, #3b82f6)")
+    ]
+}
+
 ## YOUR DESIGN PHILOSOPHY
 - **Match the mood.** A law firm's lobby sign should NOT look like a rave flyer. Read the request carefully and choose an appropriate visual direction.
 - **Variety is key.** You know dozens of styles: neon, corporate, rustic, minimal, retro, playful, elegant, brutalist, organic, vintage, futuristic, hand-lettered, and more.
@@ -362,6 +411,7 @@ MUST-HAVES:
 - Background that fits the context — gradients for events, solids or subtle gradients for professional, warm tones for welcoming.
 - 6-10 elements for visual richness.
 - Pick an intentional font pairing that matches the mood.
+- Vary palettes and font pairings across requests. Avoid repeating the same colors or font combos unless the user explicitly asks for it.
 - IMPORTANT: Do NOT default to dark backgrounds with neon glow unless the sign's context calls for it. Match the aesthetic to the purpose.`;
 }
 
@@ -711,6 +761,13 @@ function sanitizeElement(el, tokenMap) {
 
     const out = { id, type, role };
 
+    if (el.position && typeof el.position === 'object') {
+        const x = clamp(el.position.x, 0, 95);
+        const y = clamp(el.position.y, 0, 95);
+        const w = clamp(el.position.w, 10, 100);
+        out.position = { x, y, w };
+    }
+
     // Text elements
     if (type === 'text') {
         if (Array.isArray(el.runs)) {
@@ -800,7 +857,7 @@ function sanitizeFrame(frame, tokenMap) {
     if (frame.layout && typeof frame.layout === 'object') {
         const l = frame.layout;
         out.layout = {
-            type: 'stack', // only stack supported in v2
+            type: l.type === 'absolute' ? 'absolute' : 'stack',
             direction: ALLOWED_LAYOUT_DIRECTIONS.has(l.direction) ? l.direction : 'vertical',
             align: ALLOWED_ALIGNS.has(l.align) ? l.align : 'center',
             justify: ALLOWED_JUSTIFIES.has(l.justify) ? l.justify : 'center',
@@ -936,6 +993,21 @@ export function validateAndSanitize(raw) {
         .slice(0, MAX_FRAMES)
         .map(f => sanitizeFrame(f, tokenMap))
         .filter(Boolean);
+
+    raw.frames.slice(0, MAX_FRAMES).forEach((frame, frameIndex) => {
+        if (frame && frame.layout && frame.layout.type && frame.layout.type !== 'absolute') {
+            errors.push(`Frame ${frameIndex + 1}: layout.type should be "absolute" for designed compositions.`);
+        }
+        const elements = Array.isArray(frame?.elements) ? frame.elements : [];
+        elements.forEach((el, elIndex) => {
+            const pos = el?.position;
+            const hasPos = pos && typeof pos.x === 'number' && typeof pos.y === 'number' && typeof pos.w === 'number';
+            if (!hasPos) {
+                const label = el?.id ? `"${el.id}"` : `#${elIndex + 1}`;
+                errors.push(`Frame ${frameIndex + 1}: element ${label} is missing position {x,y,w}.`);
+            }
+        });
+    });
 
     if (frames.length === 0) {
         return { valid: false, data: null, errors: ['All frames were invalid.'] };
@@ -1081,6 +1153,9 @@ export function resolveLayout(frame, canvasWidth, canvasHeight, tokenMap) {
     // ── Check if ANY element has a position object → use absolute mode ──
     const hasAbsolutePositions = orderedElements.some(el => el.position && typeof el.position.x === 'number');
     const isAbsolute = layout.type === 'absolute' || hasAbsolutePositions;
+    if (isAbsolute) {
+        applyFallbackPositions(orderedElements);
+    }
 
     if (isAbsolute) {
         return resolveAbsoluteLayout(orderedElements, canvasWidth, canvasHeight, tokenMap);
@@ -1088,6 +1163,152 @@ export function resolveLayout(frame, canvasWidth, canvasHeight, tokenMap) {
 
     // ── Legacy stack layout ──
     return resolveStackLayout(orderedElements, layout, canvasWidth, canvasHeight, tokenMap);
+}
+
+function applyFallbackPositions(elements) {
+    if (!Array.isArray(elements) || elements.length === 0) return;
+
+    const strategy = pickFallbackStrategy();
+
+    const taken = [];
+    const place = (el, pos) => {
+        if (!el.position) el.position = {};
+        el.position.x = typeof el.position.x === 'number' ? el.position.x : pos.x;
+        el.position.y = typeof el.position.y === 'number' ? el.position.y : pos.y;
+        el.position.w = typeof el.position.w === 'number' ? el.position.w : pos.w;
+        taken.push({ x: el.position.x, y: el.position.y, w: el.position.w });
+    };
+
+    const roleDefaults = strategy.roleDefaults;
+    const shapeSlots = strategy.shapeSlots;
+    const dividerDefaults = strategy.dividerDefaults;
+    const imageDefaults = strategy.imageDefaults;
+    let shapeIndex = 0;
+
+    elements.forEach(el => {
+        const hasPos = el.position && typeof el.position.x === 'number' && typeof el.position.y === 'number' && typeof el.position.w === 'number';
+        if (hasPos) {
+            taken.push({ x: el.position.x, y: el.position.y, w: el.position.w });
+            return;
+        }
+
+        if (el.type === 'text') {
+            const role = el.role || 'body';
+            const pos = roleDefaults[role] || roleDefaults.body;
+            place(el, pos);
+            return;
+        }
+
+        if (el.type === 'divider') {
+            place(el, dividerDefaults);
+            return;
+        }
+
+        if (el.type === 'image') {
+            place(el, imageDefaults);
+            return;
+        }
+
+        if (el.type === 'shape') {
+            const pos = shapeSlots[Math.min(shapeIndex, shapeSlots.length - 1)];
+            place(el, pos);
+            shapeIndex += 1;
+            return;
+        }
+
+        place(el, { x: 10, y: 10, w: 40 });
+    });
+}
+
+function pickFallbackStrategy() {
+    const strategies = [
+        {
+            name: 'asymmetric-left',
+            roleDefaults: {
+                headline: { x: 5, y: 10, w: 60 },
+                subhead: { x: 8, y: 26, w: 52 },
+                body: { x: 55, y: 56, w: 38 },
+                detail: { x: 55, y: 70, w: 38 },
+                brand: { x: 6, y: 78, w: 30 },
+                footer: { x: 6, y: 86, w: 40 },
+                accent: { x: 8, y: 46, w: 28 },
+            },
+            shapeSlots: [
+                { x: 70, y: 6, w: 22 },
+                { x: 76, y: 62, w: 18 },
+                { x: 8, y: 64, w: 20 },
+                { x: 40, y: 8, w: 16 },
+                { x: 32, y: 74, w: 16 },
+            ],
+            dividerDefaults: { x: 8, y: 44, w: 30 },
+            imageDefaults: { x: 62, y: 18, w: 32 },
+        },
+        {
+            name: 'diagonal-flow',
+            roleDefaults: {
+                headline: { x: 6, y: 8, w: 52 },
+                subhead: { x: 12, y: 24, w: 46 },
+                body: { x: 58, y: 46, w: 36 },
+                detail: { x: 60, y: 62, w: 34 },
+                brand: { x: 12, y: 80, w: 26 },
+                footer: { x: 62, y: 82, w: 32 },
+                accent: { x: 10, y: 44, w: 26 },
+            },
+            shapeSlots: [
+                { x: 72, y: 8, w: 20 },
+                { x: 78, y: 52, w: 16 },
+                { x: 18, y: 66, w: 18 },
+                { x: 36, y: 18, w: 16 },
+                { x: 48, y: 74, w: 14 },
+            ],
+            dividerDefaults: { x: 12, y: 40, w: 26 },
+            imageDefaults: { x: 60, y: 16, w: 30 },
+        },
+        {
+            name: 'right-column',
+            roleDefaults: {
+                headline: { x: 48, y: 10, w: 45 },
+                subhead: { x: 52, y: 26, w: 40 },
+                body: { x: 8, y: 56, w: 36 },
+                detail: { x: 8, y: 70, w: 36 },
+                brand: { x: 50, y: 78, w: 32 },
+                footer: { x: 50, y: 86, w: 34 },
+                accent: { x: 50, y: 44, w: 26 },
+            },
+            shapeSlots: [
+                { x: 8, y: 8, w: 24 },
+                { x: 14, y: 64, w: 18 },
+                { x: 68, y: 6, w: 18 },
+                { x: 72, y: 62, w: 14 },
+                { x: 34, y: 76, w: 14 },
+            ],
+            dividerDefaults: { x: 52, y: 42, w: 26 },
+            imageDefaults: { x: 10, y: 18, w: 32 },
+        },
+        {
+            name: 'z-pattern',
+            roleDefaults: {
+                headline: { x: 6, y: 10, w: 58 },
+                subhead: { x: 56, y: 24, w: 36 },
+                body: { x: 10, y: 56, w: 40 },
+                detail: { x: 58, y: 70, w: 34 },
+                brand: { x: 10, y: 82, w: 26 },
+                footer: { x: 58, y: 84, w: 34 },
+                accent: { x: 36, y: 44, w: 28 },
+            },
+            shapeSlots: [
+                { x: 72, y: 8, w: 20 },
+                { x: 8, y: 68, w: 18 },
+                { x: 72, y: 58, w: 16 },
+                { x: 32, y: 14, w: 16 },
+                { x: 46, y: 74, w: 14 },
+            ],
+            dividerDefaults: { x: 34, y: 40, w: 24 },
+            imageDefaults: { x: 60, y: 14, w: 30 },
+        }
+    ];
+
+    return strategies[Math.floor(Math.random() * strategies.length)];
 }
 
 /**

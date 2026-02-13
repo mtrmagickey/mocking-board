@@ -339,6 +339,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!bodyEl) return;
         bodyEl.classList.toggle('has-multiframe', frames.length > 1);
         bodyEl.classList.toggle('is-playing', isPlayMode);
+        if (playModeBtn) {
+            const canPlay = frames.length > 1;
+            playModeBtn.disabled = !canPlay;
+            playModeBtn.setAttribute('aria-disabled', canPlay ? 'false' : 'true');
+            playModeBtn.title = canPlay ? 'Preview storyboard playback' : 'Add another frame to enable playback';
+        }
     }
 
     function setEditMode(active) {
@@ -1405,6 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function enterPlayMode() {
+        if (frames.length < 2) return;
         if (isPlayMode) return;
         // Commit current canvas into the current frame before starting playback
         frames[currentFrameIndex] = snapshotCurrentCanvas();
@@ -1510,6 +1517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (playModeBtn) {
         playModeBtn.setAttribute('aria-pressed', 'false');
         playModeBtn.addEventListener('click', () => {
+            if (playModeBtn.disabled) return;
             if (isPlayMode) {
                 exitPlayMode();
             } else {

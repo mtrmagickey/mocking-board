@@ -172,6 +172,11 @@ body:not(.is-playing) #frame-bar {
     transform: translateY(24px);
     pointer-events: none;
 }
+body.advanced-open #frame-bar {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
 .frame-bar label,
 .frame-bar span {
     color: #e2e8f0;
@@ -197,6 +202,12 @@ body:not(.is-playing) #frame-bar {
     background: rgba(255,255,255,0.2);
     transform: translateY(-1px);
     box-shadow: 0 14px 32px rgba(15,23,42,0.55);
+}
+.frame-bar button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 #frame-play-btn.is-playing {
     background: linear-gradient(135deg, #f87171, #dc2626);
@@ -666,6 +677,38 @@ body.signage-mode-active .signage-exit-btn:focus-visible {
     transform: translateX(120%);
     transition: opacity 0.2s ease, transform 0.2s ease;
     z-index: 9997;
+}
+.advanced-section {
+    display: grid;
+    gap: 8px;
+    padding: 6px 4px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 4px;
+}
+.advanced-section-title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(248, 250, 252, 0.7);
+}
+.advanced-panel .frame-bar {
+    position: static;
+    right: auto;
+    bottom: auto;
+    padding: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 12px;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+}
+.advanced-panel .frame-bar button {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+.advanced-panel .frame-bar label,
+.advanced-panel .frame-bar span {
+    color: #e2e8f0;
 }
 .advanced-panel button {
     padding: 8px 14px;
