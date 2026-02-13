@@ -105,7 +105,7 @@ export default {
         }
 
         // Enforce limits
-        const maxTokensCap = parseInt(env.MAX_TOKENS) || 2048;
+        const maxTokensCap = parseInt(env.MAX_TOKENS) || 4096;
         body.max_tokens = Math.min(body.max_tokens || maxTokensCap, maxTokensCap);
 
         // Allowlist only safe fields

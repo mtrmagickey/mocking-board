@@ -30,7 +30,8 @@
 
 // ⚠️  Your deployed Cloudflare Worker URL:
 const DEFAULT_PROXY_URL = 'https://mocking-board-proxy.mocking-board.workers.dev/api/generate';
-export const MODEL = 'gpt-4.1-nano'; // cheapest capable model
+export const MODEL = 'gpt-4.1-nano';          // clarification pass (cheap)
+export const GENERATION_MODEL = 'gpt-4.1-mini'; // generation pass (creative)
 
 export function getProxyUrl() {
     try {
@@ -56,22 +57,29 @@ export function setProxyUrl(url) {
  * These questions help nail down design intent cheaply before
  * the heavier generation pass.
  */
-export const CLARIFY_SYSTEM_PROMPT = `You are a sign-design assistant. The user described the sign they need. Ask EXACTLY 3 short, specific questions to make a great sign. Don't ask vague questions.
+export const CLARIFY_SYSTEM_PROMPT = `You are a sign-design assistant. The user described the sign they need. Ask EXACTLY 3 short follow-up questions to make a great sign.
 
-Your 3 questions MUST cover:
-1. CONTENT: What exact text goes on the sign? Names, times, locations, details. Get specifics.
-2. STYLE: What feeling should it evoke? Give 3-4 choices like "bold & modern, warm & inviting, clean & minimal, or fun & colorful?"
-3. CONTEXT: Screen orientation — landscape (TV on wall) or portrait (kiosk/phone)? And roughly how far away will people read it?
+IMPORTANT: Your questions must be SPECIFIC to what the user actually asked for. Do NOT use generic templates. Read the request carefully and ask about the gaps.
 
-Keep questions conversational, short (one sentence each), and easy to answer quickly.
+Examples of GOOD questions (specific to the request):
+- If they say "welcome sign for a bakery" → ask "What's the bakery name and any tagline?" not generic "what text goes on the sign?"
+- If they mention a conference → ask "Single-day or multi-day? Should we include a hashtag or URL?"
+- If the purpose is clear → skip asking about mood and instead ask about specific details like colors, timing, or layout preferences
+
+Examples of BAD questions (too generic):
+- "What text should go on the sign?" (when they already said)
+- "What feeling should it evoke?" (a fixed template question)
+- "Landscape or portrait?" (ask only if it actually matters)
+
+Each question should fill in a REAL gap in the request. Be conversational and short (one sentence each).
 
 Respond with ONLY this JSON — no markdown, no commentary:
 
 {
   "questions": [
-    "<question about exact content/text>",
-    "<question about style/mood>",
-    "<question about display context>"
+    "<specific follow-up #1>",
+    "<specific follow-up #2>",
+    "<specific follow-up #3>"
   ]
 }`;
 
@@ -80,60 +88,147 @@ Respond with ONLY this JSON — no markdown, no commentary:
  * The model receives the full conversation (initial request +
  * clarifications + user answers) and outputs the v2 signage JSON.
  */
-export const GENERATE_SYSTEM_PROMPT = `You are a signage designer. Output ONLY valid JSON, no markdown.
+export const GENERATE_SYSTEM_PROMPT = `You are an award-winning signage designer who creates DIVERSE, STUNNING digital signs across every aesthetic — from neon nightclubs to clean corporate, from warm rustic to playful kids' events. You adapt your style to match the sign's purpose and context. Output ONLY valid JSON, no markdown.
 
-## MANDATORY VISUAL RULES — FOLLOW ALL OF THESE
+## YOUR DESIGN PHILOSOPHY
+- **Match the mood.** A law firm's lobby sign should NOT look like a rave flyer. Read the request carefully and choose an appropriate visual direction.
+- **Variety is key.** You know dozens of styles: neon, corporate, rustic, minimal, retro, playful, elegant, brutalist, organic, vintage, futuristic, hand-lettered, and more.
+- **Every sign tells a story** through visual rhythm: big → small → accent → breathe → detail.
+- **Animation brings signs to life.** Use it on 3-5 elements, not just 1-2. Motion creates energy.
+- **Depth through layering:** translucent shapes behind text, glowing orbs, glass cards, floating accents.
 
-Every sign MUST have ALL of these:
-1. A GRADIENT background (2 colors, linear/radial/conic, angled). NEVER use "solid". ALWAYS "gradient".
-2. At least ONE shape element (rect, circle, or triangle) as a colored accent.
-3. At least ONE divider element between text sections.
-4. Giant headline text: 72–140px. Font pairing: "Old Standard TT" for headlines, "Roboto" for body.
-5. High contrast: light on dark OR dark on light.
-6. Maximum 6 elements total. Headlines 2–5 words.
+## COMPOSITION — THIS IS CRITICAL
+You MUST use ABSOLUTE positioning to place elements across the canvas. Do NOT center everything along the middle. Signs should feel like a designed poster, not a PowerPoint slide.
 
-## EFFECTS YOU MUST USE — these make signs look professional
+### Rule of Thirds
+Imagine the canvas divided into a 3×3 grid. Place key elements at or near the INTERSECTIONS (at ~33% and ~66% of width/height). This creates dynamic, professional compositions.
 
-### Text glow (neon effect)
-Add "textShadow" in blockStyle. Examples:
-- Subtle glow: "0 0 20px #F59E0B, 0 0 60px #F59E0B55"
-- Neon: "0 0 10px #ff00ff, 0 0 40px #ff00ff, 0 0 80px #ff00ff55"
-- Sharp: "2px 2px 4px rgba(0,0,0,0.5)"
-USE textShadow on EVERY headline.
+### Composition Strategies (pick one per frame):
+1. **Asymmetric split**: Headline top-left (x:5, y:8), body text bottom-right (x:45, y:65), shapes scattered in remaining space.
+2. **Diagonal flow**: Elements arranged along a diagonal from top-left to bottom-right (or vice versa).
+3. **L-shape**: Large headline along the top, supporting text down the left side, open space bottom-right filled with shapes.
+4. **Z-pattern**: Eye flows top-left → top-right → bottom-left → bottom-right.
+5. **Hero + scatter**: One big element dominates ~40% of the canvas, smaller elements scattered around it with breathing room.
+6. **Thirds columns**: Content in the left or right third, decorative shapes filling the other two-thirds.
 
-### Uppercase spaced-out headers
-Add "textTransform": "uppercase" and "letterSpacing": "0.15em" to headline blockStyle for dramatic effect.
+### Position Guidelines
+- Headline: Place it prominently but NOT dead center. Try top-left, top-right, or offset from center.
+- Body text: Offset from the headline — don't stack directly below. Use a different region of the canvas.
+- Shapes: Scatter across the canvas! Place in corners, edges, and open space. Overlap text slightly for depth (use low opacity).
+- Dividers: Can be diagonal, short accents, not just centered horizontal lines.
+- Leave intentional OPEN SPACE — not every region needs filling. Whitespace is a design element.
+
+Each element needs a "position" object with x, y, w values (percentages of canvas):
+- x: 0-95 (left edge of element as % of canvas width)
+- y: 0-95 (top edge of element as % of canvas height)
+- w: 10-100 (width of element as % of canvas width)
+- Text height is auto-calculated from content and font size.
+- Shape height comes from the shape type.
+
+## DESIGN GUIDELINES — Adapt these to the sign's mood
+
+1. **Background** — Choose what fits: bold gradients for events/nightlife, solid or subtle gradients for corporate/institutional, warm tones for cafés/restaurants, pastels for kids/playful, dark+neon for tech/gaming. Solid backgrounds are fine when appropriate.
+2. **At least 2-3 shape elements** — Decorative shapes create visual interest. Scale and style should match the aesthetic (geometric for modern, organic for natural, etc.)
+3. **A divider** between text sections adds structure.
+4. **Strong headline text**: 80-160px depending on content length. Use textShadow only when it fits the aesthetic (neon glow for nightlife, subtle drop-shadow for corporate, none for clean minimal).
+5. **High contrast** and readable — this is non-negotiable. But palette warmth/coolness should match the context.
+6. **6-10 elements per frame** for visual richness.
+7. **At least 3 animated elements** per frame — even subtle animations (gentle pulse, slow float) keep signs alive.
+
+## TEXT STYLING — Match the aesthetic
+
+### For bold/neon/nightlife signs:
+- textShadow with neon glow layers, uppercase, wide letterSpacing (0.15em-0.3em)
+- Example: "0 0 7px #fff, 0 0 21px #ff00de, 0 0 82px #ff00de"
+
+### For elegant/formal signs:
+- Subtle textShadow (soft drop), title case or small caps, moderate letterSpacing (0.05em-0.12em)
+- Example: "0 2px 10px rgba(0,0,0,0.15)"
+
+### For clean/corporate/minimal signs:
+- No textShadow or very subtle, no forced uppercase, normal letterSpacing
+- Let the typography speak for itself
+
+### For warm/rustic/organic signs:
+- Warm soft shadows, comfortable sizing, lowercase or sentence case OK
+- Example: "0 2px 8px rgba(80,40,0,0.2)"
+
+### For playful/kids/colorful signs:
+- Bright colors, fun shadows, mixed case OK, bouncy animations
+- Example: "2px 2px 0 #ff6b6b, 4px 4px 0 #ffd93d"
+
+## SHAPE & EFFECT TECHNIQUES
 
 ### Shape effects
-Shapes support these style properties:
-- "boxShadow": "0 4px 30px rgba(0,0,0,0.3)" — floating shadow depth
-- "borderRadius": "50%" for pill/rounded, "12px" for rounded rect
-- "opacity": 0.0-1.0 — translucent overlays
-- "backdropFilter": "blur(16px)" — glassmorphism (frosted glass)
-- "filter": "blur(8px)" — soft glow, diffused shapes
+- **Glowing orbs**: circle, opacity 0.15-0.4, boxShadow glow, animate with pulse — great for nightlife/tech
+- **Glass cards**: rect, backdropFilter blur(20px), opacity 0.1-0.2 — great for modern/corporate
+- **Accent bars**: rect with gradient fill — great for any style
+- **Floating bubbles**: circle, small, opacity 0.2-0.5, float animation — great for playful/organic
+- **Subtle panels**: rect, soft background, rounded corners — great for corporate/institutional
+- **Textured shapes**: opacity 0.05-0.15 for depth without dominating
 
-### Animation (optional, use on 1-2 elements max)
-Add "animation" object to any element:
-- { "type": "pulse", "speed": 2000 } — gentle breathing scale
-- { "type": "gradient-rotate", "startColor": "#hex", "endColor": "#hex", "speed": 50 } — spinning gradient
-- { "type": "gradient-shift", "startColor": "#hex", "endColor": "#hex", "speed": 80 } — color morphing
-- { "type": "color-transition", "startColor": "#hex", "endColor": "#hex", "speed": 1500 } — bg color toggle
+Shape style properties:
+- "boxShadow": CSS shadow string — floating depth
+- "borderRadius": "50%" for circles, "8px"-"24px" for rounded rects
+- "opacity": 0.05-1.0
+- "backdropFilter": "blur(8px)"-"blur(24px)" — glassmorphism
+- "filter": "blur(8px)"-"blur(40px)" — soft glow blobs
+- "gradient": CSS gradient string
+
+### Divider styling
+"boxShadow" for glow effect. "thickness": 2-3, "width": "30%"-"50%".
+
+### Animation — USE ON 3-5 ELEMENTS PER FRAME
+- { "type": "pulse", "speed": 2000-4000 } — breathing scale. Great on shapes, orbs.
+- { "type": "float", "speed": 3000-6000 } — vertical float. Great on shapes, accent text.
+- { "type": "spin", "speed": 8000-20000 } — slow rotation. Great on gradient shapes, abstract accents.
+- { "type": "glow-pulse", "speed": 2000-4000, "startColor": "#hex", "endColor": "#hex" } — pulsating shadow.
+- { "type": "fade-pulse", "speed": 3000-5000 } — opacity breathing. Great on background shapes.
+- { "type": "gradient-rotate", "startColor": "#hex", "endColor": "#hex", "speed": 30-80 } — spinning gradient fill.
+- { "type": "gradient-shift", "startColor": "#hex", "endColor": "#hex", "speed": 60-120 } — morphing colors.
+- { "type": "color-transition", "startColor": "#hex", "endColor": "#hex", "speed": 2000-4000 } — bg color toggle.
+
+Mix types per sign. Even corporate signs benefit from subtle pulse/float.
 
 ### Background options
-- Linear: "direction": "135deg" (angled), "to bottom" (vertical), "to right" (horizontal)
-- Radial: "type": "radial" — spotlight/circular effect
-- Conic: "type": "conic" — starburst effect
-- Overlay: add "overlay": {"color": "#000000", "opacity": 0.3} for dark tint
+- Linear gradient: various angles (135deg, 225deg, 160deg, 180deg)
+- Radial gradient: spotlight effect
+- Conic gradient: starburst/sweep
+- Solid color: appropriate for clean/minimal/corporate designs
+- Color stops: 2-4 stops for richness
+- Overlay: {"color": "#000000", "opacity": 0.1-0.5} for tinted depth (optional, not mandatory)
 
 ### Multi-frame slideshows
-For complex signs, use 2-3 frames. Each frame gets its own background, layout, and elements. Frames auto-cycle.
+For detailed signs, use 2-3 frames:
+- Frame 1: Hero statement (big headline, dramatic)
+- Frame 2: Details/info (structured, readable)
+- Frame 3: Call to action or branding
+Each frame gets unique background, layout, and animations. Frames auto-cycle with "fade" transition.
+
+## FONT PAIRINGS — Choose based on mood
+
+| Mood | Display Font | Body Font |
+|------|-------------|-----------|
+| Elegant/Classic | Playfair Display | Lora |
+| Modern/Clean | Montserrat | Roboto |
+| Bold/Impact | Bebas Neue | Roboto |
+| Tech/Futuristic | Space Grotesk | Space Grotesk |
+| Warm/Friendly | Poppins | Poppins |
+| Editorial | Playfair Display | Roboto |
+| Casual/Fun | Permanent Marker | Poppins |
+| Condensed/Urban | Oswald | Roboto |
+| Refined | Raleway | Lora |
+| Traditional | Old Standard TT | Georgia |
+| Handwritten accent | Caveat | Roboto |
+| Corporate | Roboto | Roboto |
+| Inviting | Poppins | Lora |
 
 ## ELEMENT TYPES
 
-- **text**: "runs":[{"text":"..."}], "blockStyle": { fontFamily, fontSize, fontWeight, color, align, lineHeight, textShadow, letterSpacing, textTransform, opacity }
-- **shape**: "shape": "rect"|"circle"|"triangle". "style": { color, boxShadow, borderRadius, opacity, backdropFilter, filter }. Great as glowing orbs, accent bars, glass cards.
-- **divider**: "style": { color, thickness (2-4), width ("40%"-"60%") }
-- **spacer**: empty breathing room
+- **text**: "runs":[{"text":"..."}], "blockStyle": { fontFamily, fontSize (18-160), fontWeight (400/600/700/900), color, align, lineHeight (0.9-1.5), textShadow, letterSpacing, textTransform, opacity }
+- **shape**: "shape": "rect"|"circle"|"triangle". "style": { color, boxShadow, borderRadius, opacity, backdropFilter, filter, gradient }
+- **divider**: "style": { color, thickness (2-4), width ("30%"-"60%"), boxShadow }
+- **spacer**: breathing room between sections
 
 ## JSON SCHEMA
 
@@ -143,76 +238,130 @@ For complex signs, use 2-3 frames. Each frame gets its own background, layout, a
   "branding": { "orgName": "", "logoUrl": "", "palette": "" },
   "tokens": {
     "colors": { "primary":"#hex", "secondary":"#hex", "accent":"#hex", "bg":"#hex", "muted":"#hex" },
-    "fonts": { "display": "Old Standard TT", "body": "Roboto" },
-    "spacing": { "sm": 16, "md": 40, "lg": 80 }
-  },
-  "frames": [{
-    "duration": 30,
-    "transition": { "type": "fade", "duration": 0.8 },
-    "background": {
-      "type": "gradient",
-      "gradient": { "type": "linear"|"radial"|"conic", "direction": "135deg", "stops": [{"color":"#hex","position":0},{"color":"#hex","position":100}] },
-      "overlay": { "color": "#000000", "opacity": 0.2 }
-    },
-    "layout": { "type": "stack", "direction": "vertical", "align": "center", "justify": "center", "padding": "$lg", "gap": "$md", "children": ["el-1","el-2"] },
-    "elements": [
-      { "id": "el-1", "type": "text", "role": "headline", "runs": [{"text":"..."}], "blockStyle": { "fontFamily": "$display", "fontSize": 96, "fontWeight": 700, "color": "$primary", "align": "center", "lineHeight": 1.1, "textShadow": "0 0 20px #hex", "textTransform": "uppercase", "letterSpacing": "0.1em" } },
-      { "id": "el-2", "type": "shape", "shape": "circle", "style": { "color": "#hex", "boxShadow": "0 0 40px #hex55", "opacity": 0.6 }, "animation": { "type": "pulse", "speed": 2000 } }
-    ]
-  }]
-}
-
-## blockStyle shorthand
-fontFamily: "$display"|"$body". fontSize: 20-140. fontWeight: 400|700. color: "$primary"|"$secondary"|"$accent"|"$muted"|"#hex". align: "center"|"left"|"right". lineHeight: 1.0-1.5. textShadow: CSS string. letterSpacing: CSS string. textTransform: "uppercase"|"none". opacity: 0-1.
-
-## DESIGN RECIPES
-
-**Neon Night**: bg gradient #0a0a1a→#1a0a2e (135deg), white headline with pink neon glow (textShadow: "0 0 10px #ff006688, 0 0 40px #ff006644"), glowing circle shape (opacity:0.3, boxShadow: "0 0 60px #ff0066"), gold divider.
-**Warm Elegant**: bg radial gradient #fef3c7→#fde68a, dark brown text with subtle shadow, rounded rect accent (borderRadius: "8px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)"), thin divider.
-**Frosted Glass**: bg gradient #667eea→#764ba2, glass card shape (backdropFilter: "blur(16px)", opacity: 0.15, borderRadius: "16px"), white uppercase text with letter-spacing, thin white divider.
-**Bold Modern**: bg gradient #1a1a2e→#16213e, white uppercase headline with gold glow, gold accent rect bar, gold divider, pulsing circle accent.
-**Corporate Clean**: bg gradient #f8fafc→#e2e8f0, dark text, blue accent rect with soft shadow, thin gray divider, muted footer.
-
-## FULL EXAMPLE — Neon bar event sign
-
-{
-  "version": "2.0",
-  "meta": { "title": "DJ Night", "intent": "quick-signage", "contrast": "high", "aspectRatio": "16:9" },
-  "branding": { "orgName": "Club Neon", "logoUrl": "", "palette": "neon" },
-  "tokens": {
-    "colors": { "primary": "#FFFFFF", "secondary": "#FF006E", "accent": "#FFD700", "bg": "#0A0A1A", "muted": "#8888AA" },
-    "fonts": { "display": "Old Standard TT", "body": "Roboto" },
+    "fonts": { "display": "FontName", "body": "FontName" },
     "spacing": { "sm": 16, "md": 44, "lg": 88 }
   },
   "frames": [{
     "duration": 30,
     "transition": { "type": "fade", "duration": 0.8 },
     "background": {
-      "type": "gradient",
-      "gradient": { "type": "linear", "direction": "135deg", "stops": [{"color": "#0A0A1A", "position": 0}, {"color": "#1A0A2E", "position": 100}] }
+      "type": "gradient"|"solid",
+      "gradient": { "type": "linear"|"radial"|"conic", "direction": "135deg", "stops": [{"color":"#hex","position":0},{"color":"#hex","position":100}] },
+      "color": "#hex",
+      "overlay": { "color": "#000000", "opacity": 0.3 }
     },
-    "layout": { "type": "stack", "direction": "vertical", "align": "center", "justify": "center", "padding": "$lg", "gap": "$md", "children": ["el-1","el-2","el-3","el-4","el-5","el-6"] },
+    "layout": { "type": "absolute", "children": ["el-1","el-2",...] },
     "elements": [
-      { "id": "el-1", "type": "shape", "shape": "circle", "style": { "color": "#FF006E", "opacity": 0.25, "boxShadow": "0 0 80px #FF006E66" }, "animation": { "type": "pulse", "speed": 3000 } },
-      { "id": "el-2", "type": "text", "role": "headline", "runs": [{"text": "DJ Night"}], "blockStyle": { "fontFamily": "$display", "fontSize": 120, "fontWeight": 700, "color": "$primary", "align": "center", "lineHeight": 1.05, "textShadow": "0 0 15px #FF006E, 0 0 60px #FF006E55", "textTransform": "uppercase", "letterSpacing": "0.15em" } },
-      { "id": "el-3", "type": "divider", "role": "accent", "style": { "color": "$accent", "thickness": 2, "width": "30%" } },
-      { "id": "el-4", "type": "text", "role": "subhead", "runs": [{"text": "Featuring DJ Pulse"}], "blockStyle": { "fontFamily": "$body", "fontSize": 40, "fontWeight": 400, "color": "$secondary", "align": "center", "lineHeight": 1.2, "letterSpacing": "0.05em" } },
-      { "id": "el-5", "type": "shape", "shape": "rect", "style": { "color": "#FFD700", "opacity": 0.4, "borderRadius": "4px", "boxShadow": "0 0 30px #FFD70044" } },
-      { "id": "el-6", "type": "text", "role": "body", "runs": [{"text": "Saturday 10PM  ·  No Cover Before Midnight"}], "blockStyle": { "fontFamily": "$body", "fontSize": 26, "fontWeight": 400, "color": "$muted", "align": "center", "lineHeight": 1.4 } }
+      { "id": "el-1", "type": "shape", "position": { "x": 60, "y": 5, "w": 35 }, ... },
+      { "id": "el-2", "type": "text", "role": "headline", "position": { "x": 5, "y": 12, "w": 55 }, "runs": [{"text":"..."}], "blockStyle": { ... } },
+      { "id": "el-3", "type": "divider", "role": "accent", "position": { "x": 5, "y": 45, "w": 30 }, "style": { ... } },
+      ...more elements
     ]
   }]
 }
 
-REMEMBER:
-- ALWAYS use textShadow on headlines for glow effect.
-- ALWAYS use textTransform + letterSpacing on headlines.
-- ALWAYS use boxShadow and/or opacity on shape elements.
-- ALWAYS use gradient backgrounds.
-- ALWAYS include shapes and dividers — NEVER only text elements.
-- Use animation on 1-2 elements for wow factor when the mood is fun/bold/neon.`;
+IMPORTANT: Every element MUST have a "position": { "x": number, "y": number, "w": number } object where x, y, w are PERCENTAGES (0-100) of the canvas dimensions. Place elements across the canvas using rule-of-thirds composition — do NOT clump everything in the center.
+
+## blockStyle shorthand
+fontFamily: "$display"|"$body". fontSize: 18-160. fontWeight: 400|600|700|900. color: "$primary"|"$secondary"|"$accent"|"$muted"|"#hex". align: "center"|"left"|"right". lineHeight: 0.9-1.5. textShadow: CSS string. letterSpacing: CSS string. textTransform: "uppercase"|"none"|"capitalize". opacity: 0-1.
+
+## DESIGN RECIPES — Study these for RANGE, then create something UNIQUE for each request
+
+**Neon Nightclub**: bg #0a0a1a→#1a0a2e (135deg), overlay 0.1. Glowing orb (circle, #ff006e, opacity:0.2, blur(30px), pulse). White headline 140px with triple neon glow. Gold divider. Pink subhead. Floating circle accents with gradient-rotate.
+
+**Clean Corporate**: bg solid #FFFFFF or subtle gray gradient #f8fafc→#e2e8f0. Navy headline 100px, Montserrat, no textShadow. Thin #3b82f6 divider. Subtle rect panel (opacity 0.04) behind content. Roboto body in #334155. Gentle pulse on accent shape.
+
+**Warm Café / Restaurant**: bg warm gradient #fef3c7→#fde68a→#f59e0b (radial). Dark brown headline 110px, Playfair Display, soft warm shadow. Cream divider. Poppins body in #78350f. Floating organic circle shapes in warm amber (opacity 0.15).
+
+**Playful / Kids Event**: bg bright gradient #fbbf24→#f472b6→#818cf8 (135deg). White Permanent Marker headline 130px with colorful offset shadow (2px 2px #ff6b6b). Thick rainbow divider. Bouncing shapes with fast pulse. Poppins body. Bright saturated palette.
+
+**Minimal Modern**: bg solid #0f172a (dark) or #ffffff (light). Single accent color. Large Raleway headline 120px, thin weight (400), wide letterSpacing (0.2em), no textShadow. Hair-thin divider. Lots of whitespace. Minimal shapes — one subtle glass panel. Fade-pulse on accent.
+
+**Rustic / Handcrafted**: bg warm solid #faf5ef or subtle paper gradient #f5f0e8→#ede5d8. Dark heading in Caveat or Old Standard TT, 100px, subtle shadow. Earth-tone palette (#8b5e3c, #6b7c3f, #d4a574). Organic shape accents. Slow float animations.
+
+**Retro Synthwave**: bg linear #2d1b69→#11001c→#0d0d2b (3 stops 160deg). Hot pink + cyan palette. Montserrat headline with neon pink glow. Horizontal rect accent bars. Gradient-shift shapes.
+
+**Elegant Gala**: bg radial #1a1a2e→#0d0d1a, overlay 0.3. Gold headline 120px, Playfair Display, gold glow. Thin gold divider. Glass panel behind content. Subtle pulse. Lora body in cream.
+
+**Professional / Wayfinding**: bg solid #1e293b or #ffffff. Clear, readable hierarchy. Roboto 90px headline in contrasting color, no glow. Color-coded accent bars for sections. Minimal animation (one slow pulse). High information density.
+
+**Bold Event / Festival**: bg conic #ff006e→#3b82f6→#ff006e, overlay 0.2. White Bebas Neue headline 160px, uppercase, multi-color glow. Spinning gradient orb. Thick vibrant divider. High energy animations on 4+ elements.
+
+**Nature / Botanical**: bg radial #064e3b→#022c22, overlay 0.1. Mint headline with soft glow. Emerald orbs (opacity 0.15, pulse). Poppins font. Organic shapes.
+
+**Frosted Glass**: bg #667eea→#764ba2 (radial), overlay 0.2. Large glass card (backdropFilter blur(20px), opacity:0.08). White headline 120px with soft glow. Float animation.
+
+**Seasonal Holiday**: bg festive gradient matching season. Seasonal color palette. Festive shapes. Playful but polished. Medium animations.
+
+**Tech / Startup**: bg dark #09090b→#18181b. Space Grotesk throughout. Accent color (lime #84cc16 or cyan #22d3ee). Subtle grid shapes. Code-like precision. Clean hierarchy.
+
+**Vintage / Retro Print**: bg warm #fefce8 or aged paper tone. Serif headlines (Old Standard TT), classic layout. Muted earth tones. Border accents instead of glow. Minimal animation.
+
+## CRITICAL REMINDERS
+- EVERY element needs a "position" object with x, y, w as percentages. Use ABSOLUTE layout.
+- SCATTER elements across the canvas using rule-of-thirds. Do NOT center-stack everything.
+- Shapes should be placed in different regions — corners, edges, overlapping text areas at low opacity.
+- MATCH the visual style to the sign's PURPOSE and CONTEXT. Don't default to neon/dark for everything.
+- textShadow glow is great for nightlife/events — but use subtle shadows or none for corporate/minimal.
+- textTransform uppercase + letterSpacing is great for bold/modern — but sentence case and normal spacing works for warm/casual.
+- ALWAYS use 3+ animated elements per frame — but animation intensity should match the tone (subtle for formal, energetic for events).
+- ALWAYS use shapes for depth and visual interest — but shape style should match the aesthetic.
+- VARY your designs dramatically between requests. Never produce the same look twice.
+- USE the full element budget (6-10 elements).
+- PICK a font pairing that matches the mood — don't default to one style.
+- LIGHT BACKGROUNDS are completely valid for corporate, institutional, café, minimal, and many other contexts.
+- SOLID BACKGROUNDS are fine when they serve the design.`;
 
 // Legacy alias for backward compat
 export const SIGNAGE_SYSTEM_PROMPT = GENERATE_SYSTEM_PROMPT;
+
+/**
+ * Creative boost wrapper — wraps a user's plain description
+ * with creative direction to push the AI toward bolder output.
+ */
+export function wrapUserPrompt(userDescription, userAnswers) {
+    // Rotate through diverse style directions to avoid sameness
+    const styleDirections = [
+        'Consider a BOLD, dramatic look — neon glows, dark background, vibrant gradients, high energy.',
+        'Consider a CLEAN, corporate look — light background, professional fonts, subtle animations, refined palette.',
+        'Consider a WARM, inviting look — earthy tones, cozy fonts, organic shapes, gentle animations.',
+        'Consider a PLAYFUL, colorful look — bright palette, fun fonts, bouncy animations, energetic shapes.',
+        'Consider a MINIMAL, modern look — lots of whitespace, thin typography, one accent color, understated elegance.',
+        'Consider a RETRO or VINTAGE look — warm tones, serif fonts, classic layout, textured feel.',
+        'Consider an ELEGANT, luxurious look — dark + gold/silver, serif display font, glass effects, slow animations.',
+        'Consider a TECH/FUTURISTIC look — dark background, monospace or geometric fonts, cyan/lime accents, precise layout.',
+    ];
+    const styleHint = styleDirections[Math.floor(Math.random() * styleDirections.length)];
+
+    return `## SIGN REQUEST
+${userDescription}
+
+## USER PREFERENCES
+${userAnswers}
+
+## CREATIVE DIRECTION
+Design a STUNNING, eye-catching sign that matches the tone and context of the request. This should look like professional digital signage.
+
+${styleHint}
+But ultimately, let the sign's PURPOSE guide your aesthetic choices. A café menu should feel different from a tech conference banner.
+
+COMPOSITION:
+- Use ABSOLUTE positioning with a "position" object on every element.
+- Place elements using RULE OF THIRDS — scatter across the canvas, NOT centered in a stack.
+- Headline should be prominent but offset (top-left, top-right, or asymmetric — NOT dead center).
+- Shapes should be scattered in corners, behind text, at edges — create depth through overlap and placement.
+- Leave intentional open space. Not every region needs content.
+
+MUST-HAVES:
+- Every element gets a "position": { "x": %, "y": %, "w": % } for absolute placement.
+- At least 3-5 animations — choose from: pulse, float, spin, glow-pulse, fade-pulse, gradient-rotate, gradient-shift, color-transition.
+- Use shapes (opacity 0.1-0.3) for depth and atmosphere.
+- Strong headline (80-160px) with appropriate styling for the mood (glow for nightlife, clean for corporate, warm shadow for café, etc.)
+- Background that fits the context — gradients for events, solids or subtle gradients for professional, warm tones for welcoming.
+- 6-10 elements for visual richness.
+- Pick an intentional font pairing that matches the mood.
+- IMPORTANT: Do NOT default to dark backgrounds with neon glow unless the sign's context calls for it. Match the aesthetic to the purpose.`;
+}
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -224,11 +373,31 @@ const ALLOWED_FONTS = new Set([
     'Georgia',
     'system-ui',
     'Roboto',
+    'Playfair Display',
+    'Montserrat',
+    'Oswald',
+    'Raleway',
+    'Poppins',
+    'Bebas Neue',
+    'Lora',
+    'Space Grotesk',
+    'Caveat',
+    'Permanent Marker',
     // CSS fallback stacks are resolved at render time
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     'Roboto, sans-serif',
     'Old Standard TT, serif',
     'Georgia, serif',
+    'Playfair Display, serif',
+    'Montserrat, sans-serif',
+    'Oswald, sans-serif',
+    'Raleway, sans-serif',
+    'Poppins, sans-serif',
+    'Bebas Neue, sans-serif',
+    'Lora, serif',
+    'Space Grotesk, sans-serif',
+    'Caveat, cursive',
+    'Permanent Marker, cursive',
 ]);
 
 const FONT_STACK = {
@@ -236,7 +405,33 @@ const FONT_STACK = {
     'Georgia': 'Georgia, serif',
     'system-ui': "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     'Roboto': 'Roboto, sans-serif',
+    'Playfair Display': 'Playfair Display, serif',
+    'Montserrat': 'Montserrat, sans-serif',
+    'Oswald': 'Oswald, sans-serif',
+    'Raleway': 'Raleway, sans-serif',
+    'Poppins': 'Poppins, sans-serif',
+    'Bebas Neue': 'Bebas Neue, sans-serif',
+    'Lora': 'Lora, serif',
+    'Space Grotesk': 'Space Grotesk, sans-serif',
+    'Caveat': 'Caveat, cursive',
+    'Permanent Marker': 'Permanent Marker, cursive',
 };
+
+/** All font families that need loading from Google Fonts */
+export const GOOGLE_FONT_FAMILIES = [
+    'Old Standard TT:wght@400;700',
+    'Roboto:wght@400;600;700;900',
+    'Playfair Display:wght@400;600;700;900',
+    'Montserrat:wght@400;600;700;900',
+    'Oswald:wght@400;600;700',
+    'Raleway:wght@400;600;700',
+    'Poppins:wght@400;600;700;900',
+    'Bebas Neue',
+    'Lora:wght@400;600;700',
+    'Space Grotesk:wght@400;600;700',
+    'Caveat:wght@400;700',
+    'Permanent Marker',
+];
 
 const ALLOWED_ELEMENT_TYPES = new Set([
     'text', 'divider', 'image', 'shape', 'spacer',
@@ -263,10 +458,10 @@ const ALLOWED_INTENTS = new Set([
 const ALLOWED_ASPECT_RATIOS = new Set(['16:9', '4:3', '9:16', '1:1']);
 const ALLOWED_CONTRASTS = new Set(['high', 'normal']);
 
-const MAX_FRAMES = 3;
-const MAX_ELEMENTS_PER_FRAME = 8;
-const FONT_SIZE_MIN = 18;
-const FONT_SIZE_MAX = 180;
+const MAX_FRAMES = 5;
+const MAX_ELEMENTS_PER_FRAME = 14;
+const FONT_SIZE_MIN = 14;
+const FONT_SIZE_MAX = 200;
 const SPACING_BOUNDS = { sm: [12, 24], md: [28, 56], lg: [60, 120] };
 const DURATION_MIN = 1;
 const DURATION_MAX = 120;
@@ -532,6 +727,7 @@ function sanitizeElement(el, tokenMap) {
             thickness: clamp(el.style?.thickness ?? 2, 1, 12),
             width: typeof el.style?.width === 'string' ? el.style.width : '60%',
         };
+        if (typeof el.style?.boxShadow === 'string') out.style.boxShadow = el.style.boxShadow.slice(0, 200);
     }
 
     // Image
@@ -557,13 +753,15 @@ function sanitizeElement(el, tokenMap) {
         if (typeof el.style?.backdropFilter === 'string') out.style.backdropFilter = el.style.backdropFilter.slice(0, 100);
         // CSS filter
         if (typeof el.style?.filter === 'string') out.style.filter = el.style.filter.slice(0, 100);
+        // Gradient fill (linear-gradient / radial-gradient string)
+        if (typeof el.style?.gradient === 'string') out.style.gradient = el.style.gradient.slice(0, 200);
     }
 
     // Animation config (any element type)
     if (el.animation && typeof el.animation === 'object') {
         const anim = el.animation;
         out.animation = {};
-        if (anim.type === 'gradient-rotate' || anim.type === 'gradient-shift' || anim.type === 'color-transition' || anim.type === 'pulse') {
+        if (['gradient-rotate','gradient-shift','color-transition','pulse','float','spin','glow-pulse','fade-pulse'].includes(anim.type)) {
             out.animation.type = anim.type;
         }
         if (typeof anim.speed === 'number') out.animation.speed = clamp(anim.speed, 10, 5000);
@@ -838,38 +1036,37 @@ function estimateImageHeight(availableWidth) {
 }
 
 /**
- * Estimate shape height — keep decorative accents small.
- * Shapes are accent marks, not content blocks.
+ * Estimate shape height — shapes are significant visual elements, not tiny accents.
+ * Large shapes create depth and visual impact through layering.
  */
 function estimateShapeHeight(availableWidth, shape) {
-    if (shape === 'circle') return Math.min(60, Math.round(availableWidth * 0.06));
-    if (shape === 'rect') return Math.min(12, Math.round(availableWidth * 0.015));
-    if (shape === 'triangle') return Math.min(40, Math.round(availableWidth * 0.04));
-    return Math.min(50, Math.round(availableWidth * 0.05));
+    if (shape === 'circle') return Math.min(200, Math.round(availableWidth * 0.18));
+    if (shape === 'rect') return Math.min(80, Math.round(availableWidth * 0.06));
+    if (shape === 'triangle') return Math.min(120, Math.round(availableWidth * 0.1));
+    return Math.min(150, Math.round(availableWidth * 0.12));
 }
 
 /**
- * Estimate shape cross-axis width — accent shapes shouldn't stretch full width.
+ * Estimate shape cross-axis width — shapes should have visual presence.
  */
 function estimateShapeCrossSize(availableWidth, shape) {
-    if (shape === 'circle') return Math.min(60, Math.round(availableWidth * 0.06));
-    if (shape === 'rect') return Math.round(availableWidth * 0.25);  // accent bar
-    if (shape === 'triangle') return Math.min(40, Math.round(availableWidth * 0.04));
-    return Math.round(availableWidth * 0.15);
+    if (shape === 'circle') return Math.min(200, Math.round(availableWidth * 0.18));
+    if (shape === 'rect') return Math.round(availableWidth * 0.45);  // accent bar
+    if (shape === 'triangle') return Math.min(120, Math.round(availableWidth * 0.1));
+    return Math.round(availableWidth * 0.3);
 }
 
 
 /**
  * Resolve a single frame's layout into positioned elements.
  * Returns an array of { id, x, y, w, h, element } objects.
+ *
+ * Supports two layout modes:
+ *   - "absolute": each element has a "position" { x, y, w } in percentages
+ *   - "stack" (legacy): vertical/horizontal stack with centering
  */
 export function resolveLayout(frame, canvasWidth, canvasHeight, tokenMap) {
     const layout = frame.layout || {};
-    const direction = layout.direction || 'vertical';
-    const align = layout.align || 'center';
-    const justify = layout.justify || 'center';
-    const padding = typeof layout.padding === 'number' ? layout.padding : 60;
-    const gap = typeof layout.gap === 'number' ? layout.gap : 32;
 
     // Build element lookup
     const elementMap = new Map();
@@ -878,6 +1075,78 @@ export function resolveLayout(frame, canvasWidth, canvasHeight, tokenMap) {
     // Ordered children
     const orderedIds = (layout.children || []).filter(id => elementMap.has(id));
     const orderedElements = orderedIds.map(id => elementMap.get(id));
+
+    // ── Check if ANY element has a position object → use absolute mode ──
+    const hasAbsolutePositions = orderedElements.some(el => el.position && typeof el.position.x === 'number');
+    const isAbsolute = layout.type === 'absolute' || hasAbsolutePositions;
+
+    if (isAbsolute) {
+        return resolveAbsoluteLayout(orderedElements, canvasWidth, canvasHeight, tokenMap);
+    }
+
+    // ── Legacy stack layout ──
+    return resolveStackLayout(orderedElements, layout, canvasWidth, canvasHeight, tokenMap);
+}
+
+/**
+ * Absolute layout — each element has a "position" { x, y, w } in percentages.
+ * Height is auto-estimated from content.
+ */
+function resolveAbsoluteLayout(elements, canvasWidth, canvasHeight, tokenMap) {
+    const positioned = [];
+
+    elements.forEach(el => {
+        const resolved = resolveElementTokens(el, tokenMap);
+        const pos = el.position || {};
+
+        // Convert percentage positions to pixels (default to centered if missing)
+        const xPct = typeof pos.x === 'number' ? pos.x : 50;
+        const yPct = typeof pos.y === 'number' ? pos.y : 50;
+        const wPct = typeof pos.w === 'number' ? pos.w : 80;
+
+        const x = Math.round((xPct / 100) * canvasWidth);
+        const y = Math.round((yPct / 100) * canvasHeight);
+        const w = Math.round((wPct / 100) * canvasWidth);
+
+        // Estimate height based on element type
+        let h;
+        if (el.type === 'text') {
+            h = estimateTextHeight(resolved, w, tokenMap);
+        } else if (el.type === 'divider') {
+            h = estimateDividerHeight(resolved);
+        } else if (el.type === 'spacer') {
+            h = estimateSpacerHeight();
+        } else if (el.type === 'image') {
+            h = estimateImageHeight(w);
+        } else if (el.type === 'shape') {
+            const shape = el.shape || 'rect';
+            h = estimateShapeHeight(w, shape);
+        } else {
+            h = 50;
+        }
+
+        positioned.push({
+            id: resolved.id,
+            x: Math.max(0, x),
+            y: Math.max(0, y),
+            w: Math.max(20, w),
+            h: Math.max(10, Math.round(h)),
+            element: resolved
+        });
+    });
+
+    return positioned;
+}
+
+/**
+ * Legacy stack layout — vertical/horizontal centered stacks.
+ */
+function resolveStackLayout(orderedElements, layout, canvasWidth, canvasHeight, tokenMap) {
+    const direction = layout.direction || 'vertical';
+    const align = layout.align || 'center';
+    const justify = layout.justify || 'center';
+    const padding = typeof layout.padding === 'number' ? layout.padding : 60;
+    const gap = typeof layout.gap === 'number' ? layout.gap : 32;
 
     const isVertical = direction === 'vertical';
     const mainSize = isVertical ? canvasHeight : canvasWidth;
@@ -1158,6 +1427,8 @@ export function renderElementToDOM(positioned, tokenMap) {
             background:${color};
             width:${width};
             margin:0;
+            box-shadow:${s.boxShadow || `0 0 12px ${color}44, 0 0 4px ${color}66`};
+            border-radius:${thickness}px;
         ">`;
     }
 
@@ -1204,7 +1475,14 @@ export function renderElementToDOM(positioned, tokenMap) {
         }
         // Overflow hidden for rounded SVG clipping
         div.style.overflow = 'hidden';
-        if (shape === 'rect') {
+        // Gradient fill — use CSS background instead of SVG
+        if (el.style?.gradient) {
+            div.style.background = el.style.gradient;
+            if (shape === 'circle') {
+                div.style.borderRadius = '50%';
+            }
+            // No SVG needed
+        } else if (shape === 'rect') {
             div.innerHTML = `<svg width="100%" height="100%"><rect width="100%" height="100%" fill="${color}"></rect></svg>`;
         } else if (shape === 'circle') {
             div.innerHTML = `<svg width="100%" height="100%"><circle cx="50%" cy="50%" r="50%" fill="${color}"></circle></svg>`;
@@ -1273,6 +1551,30 @@ export function renderElementToDOM(positioned, tokenMap) {
                 type: 'scale',
                 preset: 'gentle',
                 duration: (anim.speed || 2000) / 1000,
+            });
+        } else if (anim.type === 'float') {
+            div.dataset.elementAnimation = JSON.stringify({
+                type: 'move',
+                preset: 'float',
+                duration: (anim.speed || 4000) / 1000,
+            });
+        } else if (anim.type === 'spin') {
+            div.dataset.elementAnimation = JSON.stringify({
+                type: 'rotate',
+                preset: 'slow',
+                duration: (anim.speed || 12000) / 1000,
+            });
+        } else if (anim.type === 'glow-pulse') {
+            div.dataset.elementAnimation = JSON.stringify({
+                type: 'glow-pulse',
+                duration: (anim.speed || 3000) / 1000,
+                startColor: anim.startColor || '#ff006e',
+                endColor: anim.endColor || '#ff006e',
+            });
+        } else if (anim.type === 'fade-pulse') {
+            div.dataset.elementAnimation = JSON.stringify({
+                type: 'fade-pulse',
+                duration: (anim.speed || 4000) / 1000,
             });
         }
     }

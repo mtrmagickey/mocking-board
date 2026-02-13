@@ -10,7 +10,6 @@
     <div class="app-container">
         <nav id="sidebar" class="sidebar" role="navigation" aria-label="Element palette">
             <h2 id="sidebar-heading">Elements</h2>
-            <button id="signage-mode-btn" class="signage-toggle-btn" type="button" aria-pressed="false" aria-label="Hide controls for signage">Show Signage</button>
             <div role="group" aria-labelledby="sidebar-heading">
                 <button class="element-button" data-type="header" aria-label="Add header">Header</button>
                 <button class="element-button" data-type="paragraph" aria-label="Add paragraph">Paragraph</button>
@@ -58,13 +57,6 @@
                 </div>
         </main>
         <div id="toolbar" class="toolbar collapsed" role="toolbar" aria-label="Main toolbar">
-            <div class="toolbar-group" aria-label="Project">
-                <button id="load-btn" aria-label="Load project" title="Load project JSON">Load</button>
-                <button id="clear-btn" aria-label="Clear canvas" title="Clear canvas">Clear</button>
-                <button id="export-btn" aria-label="Export project" title="Export current layout as JSON">Export</button>
-                <button id="templates-btn" aria-label="New from template" title="Start from a predefined layout">Templates</button>
-                <button id="generate-sign-btn" aria-label="Generate sign with AI" title="Generate signage with AI">Generate</button>
-            </div>
             <div class="toolbar-group" aria-label="View">
                 <button id="toggle-sidebar-btn" aria-label="Toggle sidebar" title="Show or hide element sidebar">Sidebar</button>
                 <button id="background-btn" aria-label="Change background" title="Change canvas background color">Background</button>
@@ -82,6 +74,17 @@
                 <button id="ungroup-btn" aria-label="Ungroup selection" title="Ungroup selected group">Ungroup</button>
             </div>
         </div>
+    </div>
+
+    <div id="advanced-panel" class="advanced-panel" role="dialog" aria-label="Advanced actions" aria-hidden="true">
+        <button id="theme-panel-btn" aria-label="Color Themes" title="Apply a color theme">🎨 Themes</button>
+        <button id="load-btn" aria-label="Load project" title="Load project JSON">Load</button>
+        <button id="clear-btn" aria-label="Clear canvas" title="Clear canvas">Clear</button>
+        <button id="export-btn" aria-label="Export project" title="Export current layout as JSON">Export</button>
+        <button id="templates-btn" aria-label="New from template" title="Start from a predefined layout">Templates</button>
+        <button id="library-btn" aria-label="Element library" title="Add a preset element block">Library</button>
+        <button id="resize-btn" aria-label="Smart resize" title="Resize canvas with smart reflow">Resize</button>
+        <button id="variation-btn" aria-label="Variation settings" title="Control design variation">Variation</button>
     </div>
 
     <div id="contextMenu" class="context-menu" role="menu" aria-label="Element context menu">
@@ -182,17 +185,21 @@
 
     <div id="generate-sign-panel" class="gs-panel" role="dialog" aria-modal="true" aria-labelledby="gs-panel-title" style="display:none;">
         <div class="gs-panel-header">
-            <h3 id="gs-panel-title">Generate Sign</h3>
+            <h3 id="gs-panel-title">Create Signage</h3>
+            <div class="gs-mode-toggle">
+                <button id="gs-mode-replace" class="gs-mode-btn gs-mode-btn--active" title="Replace all frames">Replace</button>
+                <button id="gs-mode-add" class="gs-mode-btn" title="Add frames after current">+ Add</button>
+            </div>
             <button id="gs-close-btn" class="gs-close-btn" aria-label="Close">&times;</button>
         </div>
         <div id="gs-chat" class="gs-chat" aria-live="polite" aria-relevant="additions">
             <div class="gs-msg gs-msg--ai">
-                <p>Describe the sign you need — type or tap the mic to speak.</p>
+                <p>Describe the signage you need — no sign-in, just results.</p>
             </div>
         </div>
         <div class="gs-input-row">
             <button id="gs-mic-btn" class="gs-mic-btn" aria-label="Voice input" title="Hold to speak">🎤</button>
-            <input id="gs-input" type="text" placeholder="e.g. A welcome sign for our school open house" autocomplete="off" aria-label="Describe your sign">
+            <input id="gs-input" type="text" placeholder="e.g. Quick welcome signage for our school open house" autocomplete="off" aria-label="Describe your signage">
             <button id="gs-send-btn" class="gs-send-btn" aria-label="Send">→</button>
         </div>
         <div id="gs-status" class="gs-status"></div>
@@ -203,6 +210,24 @@
     </aside>
 
     <button id="signage-exit-btn" class="signage-exit-btn" type="button" aria-label="Restore controls" aria-hidden="true">Show Controls</button>
+
+    <!-- Hero floating action buttons -->
+    <button id="present-btn" class="hero-fab hero-fab--present" type="button" aria-pressed="false" aria-label="Present signage fullscreen">
+        <span class="hero-fab-icon">▶</span>
+        <span class="hero-fab-label">Present</span>
+    </button>
+    <button id="edit-mode-btn" class="hero-fab hero-fab--edit" type="button" aria-pressed="false" aria-label="Toggle customize mode">
+        <span class="hero-fab-icon">✎</span>
+        <span class="hero-fab-label">Customize</span>
+    </button>
+    <button id="advanced-btn" class="hero-fab hero-fab--advanced" type="button" aria-pressed="false" aria-label="Toggle advanced actions">
+        <span class="hero-fab-icon">⋯</span>
+        <span class="hero-fab-label">Advanced</span>
+    </button>
+    <button id="generate-sign-btn" class="hero-fab hero-fab--generate" aria-label="Create signage with AI" title="Create signage with AI">
+        <span class="hero-fab-icon">✦</span>
+        <span class="hero-fab-label">Create Signage</span>
+    </button>
 
     <input type="file" id="file-input" style="display: none;">
 
