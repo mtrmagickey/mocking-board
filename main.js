@@ -1272,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return resp.json();
             })
             .then((imported) => {
-                if (applyImportedData(imported, { alertOnSuccess: false })) {
+                if (applyImportedData(imported, { alertOnSuccess: false, isDemo: true })) {
                     demoModeActive = true;
                 }
             })
@@ -3713,8 +3713,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
-    function applyImportedData(imported, { alertOnSuccess = true } = {}) {
+    function applyImportedData(imported, { alertOnSuccess = true, isDemo = false } = {}) {
         if (imported && imported.project) {
+            demoModeActive = isDemo;
             frames = Array.isArray(imported.frames) && imported.frames.length
                 ? imported.frames
                 : [snapshotCurrentCanvas()];
@@ -3738,6 +3739,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
         if (imported && imported.elements) {
+            demoModeActive = isDemo;
             if (Array.isArray(imported.elements)) {
                 imported.elements.forEach(elData => {
                     if (!elData.dataset) elData.dataset = {};
