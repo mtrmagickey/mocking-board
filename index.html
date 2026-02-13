@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mocking Board</title>
+    <title>Mocking-Board</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app-container">
         <nav id="sidebar" class="sidebar" role="navigation" aria-label="Element palette">
+            <div class="app-brand" aria-label="Mocking-Board">
+                <img src="Mocking-Board_logo.png" alt="Mocking-Board logo">
+                <span>Mocking-Board</span>
+            </div>
             <h2 id="sidebar-heading">Elements</h2>
             <div role="group" aria-labelledby="sidebar-heading">
                 <button class="element-button" data-type="header" aria-label="Add header">Header</button>
@@ -40,11 +44,23 @@
                 <label for="frame-duration" style="margin-left:8px;font-size:11px;">Duration (s)</label>
                 <input id="frame-duration" type="number" min="1" max="120" value="30" style="width:48px;font-size:11px;" />
             </div>
+            <div id="splash-screen" class="splash-screen" role="dialog" aria-modal="true" aria-labelledby="splash-title" aria-describedby="splash-tagline" style="display:none;">
+                <div class="splash-backdrop"></div>
+                <div class="splash-card">
+                    <img src="Mocking-Board_logo.png" alt="Mocking-Board logo">
+                    <h1 id="splash-title">Mocking-Board</h1>
+                    <p id="splash-tagline">Design bold signage in minutes.</p>
+                    <div class="splash-actions">
+                        <button id="splash-start-btn" type="button">Start Designing</button>
+                        <button id="splash-skip-btn" type="button" class="splash-secondary">Skip</button>
+                    </div>
+                </div>
+            </div>
                 <!-- Onboarding overlay for first-time users -->
                 <div id="onboarding-overlay" style="display:none;">
                     <div class="onboarding-backdrop"></div>
                     <div class="onboarding-panel" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-                        <h2 id="onboarding-title">Welcome to Mocking Board</h2>
+                        <h2 id="onboarding-title">Welcome to Mocking-Board</h2>
                         <p id="onboarding-body"></p>
                         <div class="onboarding-steps">
                             <span id="onboarding-step-indicator"></span>
@@ -185,7 +201,7 @@
 
     <div id="generate-sign-panel" class="gs-panel" role="dialog" aria-modal="true" aria-labelledby="gs-panel-title" style="display:none;">
         <div class="gs-panel-header">
-            <h3 id="gs-panel-title">Create Signage</h3>
+            <h3 id="gs-panel-title">Create Signage for You</h3>
             <div class="gs-mode-toggle">
                 <button id="gs-mode-replace" class="gs-mode-btn gs-mode-btn--active" title="Replace all frames">Replace</button>
                 <button id="gs-mode-add" class="gs-mode-btn" title="Add frames after current">+ Add</button>
@@ -224,9 +240,9 @@
         <span class="hero-fab-icon">⋯</span>
         <span class="hero-fab-label">Advanced</span>
     </button>
-    <button id="generate-sign-btn" class="hero-fab hero-fab--generate" aria-label="Create signage with AI" title="Create signage with AI">
+    <button id="generate-sign-btn" class="hero-fab hero-fab--generate" aria-label="Create signage for you" title="Create signage for you">
         <span class="hero-fab-icon">✦</span>
-        <span class="hero-fab-label">Create Signage</span>
+        <span class="hero-fab-label">Create Signage for You</span>
     </button>
 
     <input type="file" id="file-input" style="display: none;">

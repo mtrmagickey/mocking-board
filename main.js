@@ -79,6 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const onboardingSkipBtn = document.getElementById('onboarding-skip');
     const onboardingNextBtn = document.getElementById('onboarding-next');
 
+    // Splash screen elements
+    const splashScreen = document.getElementById('splash-screen');
+    const splashStartBtn = document.getElementById('splash-start-btn');
+    const splashSkipBtn = document.getElementById('splash-skip-btn');
+
     // Background mode indicator (color / gradient / none)
     const bgModeLabel = document.createElement('span');
     bgModeLabel.id = 'bg-mode-label';
@@ -544,10 +549,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Onboarding tour logic ---
     const ONBOARDING_KEY = 'mockingBoard_seenOnboarding_v1';
+    const SPLASH_KEY = 'mockingBoard_seenSplash_v1';
     const onboardingSteps = [
         {
-            title: 'Create Signage Fast',
-            body: 'No sign-in required. Use Create Signage to get a unique layout in seconds, then customize only if you want.',
+            title: 'Create Signage for You',
+            body: 'No sign-in required. Use Create Signage for You to get a unique layout in seconds, then customize only if you want.',
         },
         {
             title: 'Presentation First',
@@ -585,6 +591,34 @@ document.addEventListener('DOMContentLoaded', () => {
         renderOnboardingStep();
     }
 
+    function closeSplash(setSeen = true) {
+        if (splashScreen) splashScreen.style.display = 'none';
+        if (setSeen) {
+            try {
+                if (window.localStorage) localStorage.setItem(SPLASH_KEY, '1');
+            } catch (e) {
+                // Ignore
+            }
+        }
+        startOnboardingIfNeeded();
+    }
+
+    function showSplashIfNeeded() {
+        if (!splashScreen) {
+            startOnboardingIfNeeded();
+            return;
+        }
+        try {
+            if (window.localStorage && localStorage.getItem(SPLASH_KEY)) {
+                startOnboardingIfNeeded();
+                return;
+            }
+        } catch (e) {
+            // Ignore storage errors, just show once per session
+        }
+        splashScreen.style.display = 'block';
+    }
+
     function finishOnboarding() {
         if (onboardingOverlay) onboardingOverlay.style.display = 'none';
         try {
@@ -610,6 +644,19 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 renderOnboardingStep();
             }
+        });
+    }
+
+    if (splashStartBtn) {
+        splashStartBtn.addEventListener('click', () => closeSplash(true));
+    }
+    if (splashSkipBtn) {
+        splashSkipBtn.addEventListener('click', () => closeSplash(true));
+    }
+    if (splashScreen) {
+        splashScreen.addEventListener('click', (e) => {
+            const card = e.target.closest('.splash-card');
+            if (!card) closeSplash(true);
         });
     }
 
@@ -1187,8 +1234,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Apply global palette CSS variables
     applyAppPaletteToCSS();
 
-    // Trigger onboarding for first-time users
-    startOnboardingIfNeeded();
+    // Trigger splash for first-time users, then onboarding
+    showSplashIfNeeded();
 
     // --- Zoom controls ---
     if (zoomOutBtn && zoomInBtn && zoomFitBtn) {
@@ -3950,6 +3997,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let gsUserDescription = '';
     let gsClarifyQuestions = [];
     let gsClarifyAnswers = [];
+    let gsClarifyIndex = 0;
     let gsInsertMode = 'replace'; // 'replace' | 'add'
 
     // Mode toggle wiring
@@ -4005,6 +4053,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gsUserDescription = '';
         gsClarifyQuestions = [];
         gsClarifyAnswers = [];
+        gsClarifyIndex = 0;
         if (gsChat) {
             gsChat.innerHTML = '';
             gsAddMsg('Describe the signage you need \u2014 no sign-in, just results.');
@@ -4061,7 +4110,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gsClarifyQuestions.length === 0) throw new Error('No questions received. Try again.');
 
             gsClarifyAnswers = new Array(gsClarifyQuestions.length).fill('');
-            gsRenderQuestions();
+            gsClarifyIndex = 0;
+            gsRenderSingleQuestion();
 
         } catch (err) {
             gsRemoveLoading();
@@ -4073,72 +4123,124 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Render clarifying questions as interactive form ──
 
-    function gsRenderQuestions() {
+    function gsRenderSingleQuestion() {
+        const question = gsClarifyQuestions[gsClarifyIndex];
+        if (!question) {
+            gsSubmitAnswers();
+            return;
+        }
+
         const container = document.createElement('div');
         container.className = 'gs-msg gs-msg--ai';
 
         const intro = document.createElement('p');
-        intro.textContent = 'A few quick questions to nail the design:';
+        intro.textContent = `Quick question (${gsClarifyIndex + 1} of ${gsClarifyQuestions.length}):`;
         container.appendChild(intro);
 
-        const qDiv = document.createElement('div');
-        qDiv.className = 'gs-questions';
+        const qLabel = document.createElement('label');
+        qLabel.className = 'gs-q-btn';
+        qLabel.textContent = question;
+        container.appendChild(qLabel);
 
-        gsClarifyQuestions.forEach((q, idx) => {
-            const label = document.createElement('label');
-            label.className = 'gs-q-btn';
-            label.textContent = `${idx + 1}. ${q}`;
-            qDiv.appendChild(label);
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'gs-q-answer-input';
-            input.placeholder = 'Your answer\u2026';
-            input.dataset.qidx = idx;
-            input.addEventListener('input', () => {
-                gsClarifyAnswers[idx] = input.value;
-            });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    // Focus next unanswered, or submit if last
-                    const nextInput = qDiv.querySelector(`input[data-qidx="${idx + 1}"]`);
-                    if (nextInput) nextInput.focus();
-                    else gsSubmitAnswers();
-                }
-            });
-            qDiv.appendChild(input);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'gs-q-answer-input';
+        input.placeholder = 'Your answer\u2026';
+        input.value = gsClarifyAnswers[gsClarifyIndex] || '';
+        input.addEventListener('input', () => {
+            gsClarifyAnswers[gsClarifyIndex] = input.value;
         });
-
-        container.appendChild(qDiv);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                gsAskMore();
+            }
+        });
+        container.appendChild(input);
 
         const submitRow = document.createElement('div');
         submitRow.className = 'gs-q-submit-row';
-        const submitBtn = document.createElement('button');
-        submitBtn.className = 'gs-q-submit-btn';
-        submitBtn.textContent = 'Make My Sign';
-        submitBtn.addEventListener('click', gsSubmitAnswers);
-        submitRow.appendChild(submitBtn);
+        const createBtn = document.createElement('button');
+        createBtn.className = 'gs-q-submit-btn';
+        createBtn.textContent = 'Create Sign';
+        createBtn.addEventListener('click', gsSubmitAnswers);
+        const askBtn = document.createElement('button');
+        askBtn.className = 'gs-q-submit-btn gs-q-secondary';
+        askBtn.textContent = 'Ask Me More';
+        askBtn.addEventListener('click', gsAskMore);
+        submitRow.appendChild(createBtn);
+        submitRow.appendChild(askBtn);
         container.appendChild(submitRow);
 
         gsChat?.appendChild(container);
         gsChat.scrollTop = gsChat.scrollHeight;
 
-        // Focus first answer
-        const firstInput = qDiv.querySelector('input');
-        if (firstInput) setTimeout(() => firstInput.focus(), 100);
+        setTimeout(() => input.focus(), 100);
+    }
+
+    async function gsAskMore() {
+        const currentAnswer = (gsClarifyAnswers[gsClarifyIndex] || '').trim();
+        gsAddMsg(currentAnswer || '(skip)', 'user');
+        gsClarifyIndex += 1;
+        if (gsClarifyIndex < gsClarifyQuestions.length) {
+            gsRenderSingleQuestion();
+            return;
+        }
+        const loadingEl = gsAddLoading();
+        try {
+            const nextQ = await gsFetchNextQuestion();
+            if (nextQ) {
+                gsClarifyQuestions.push(nextQ);
+                gsClarifyAnswers.push('');
+                gsRenderSingleQuestion();
+            } else {
+                gsSubmitAnswers();
+            }
+        } catch (err) {
+            gsAddMsg('Error: ' + err.message, 'status');
+            gsSubmitAnswers();
+        } finally {
+            gsRemoveLoading();
+        }
+    }
+
+    async function gsFetchNextQuestion() {
+        const history = gsClarifyQuestions.map((q, i) => {
+            const a = (gsClarifyAnswers[i] || '').trim() || '(no answer)';
+            return `Q: ${q}\nA: ${a}`;
+        }).join('\n\n');
+        const systemPrompt = [
+            'You are a sign-design assistant.',
+            'Ask EXACTLY 1 short, specific follow-up question.',
+            'Make it specific to the request and avoid repeating prior questions.',
+            'IMPORTANT: The app can generate text, shapes, dividers, gradients, colors, and animations.',
+            'It CANNOT fetch photos, add real images, apply glossy finishes, or use external assets.',
+            'Avoid questions that imply those capabilities.',
+            'Respond ONLY in JSON: {"question":"..."}'
+        ].join('\\n');
+
+        const userPrompt = [
+            'SIGN REQUEST:',
+            gsUserDescription,
+            '',
+            'PREVIOUS Q&A:',
+            history || '(none)'
+        ].join('\n');
+
+        const raw = await gsCallAPI([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ]);
+
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch { return null; }
+        const q = parsed && typeof parsed.question === 'string' ? parsed.question.trim() : '';
+        return q || null;
     }
 
     // ── Pass 2: Send everything, generate the sign ──
 
     async function gsSubmitAnswers() {
-        // Check that at least one answer is non-empty
-        const hasAny = gsClarifyAnswers.some(a => a.trim());
-        if (!hasAny) {
-            gsAddMsg('Please answer at least one question.', 'status');
-            return;
-        }
-
         gsState = 'generating';
         // Disable all question inputs
         gsChat?.querySelectorAll('.gs-q-answer-input').forEach(inp => { inp.disabled = true; });

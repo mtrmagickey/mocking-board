@@ -73,6 +73,8 @@ Examples of BAD questions (too generic):
 
 Each question should fill in a REAL gap in the request. Be conversational and short (one sentence each).
 
+IMPORTANT CAPABILITIES: This app can generate text, shapes, dividers, gradients, colors, and animations. It CANNOT fetch photos, add real images, apply glossy finishes, or use external assets. Avoid questions that imply those capabilities.
+
 Respond with ONLY this JSON — no markdown, no commentary:
 
 {
