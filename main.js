@@ -1232,16 +1232,39 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.forEach(el => attachElementInteractions(el));
     }
 
-    // Initialize first empty frame
-    frames[0] = snapshotCurrentCanvas();
-    updateFrameLabel();
-    updateFrameBarState();
+    function finalizeInitialLayout() {
+        if (!frames.length) {
+            frames[0] = snapshotCurrentCanvas();
+        }
+        updateFrameLabel();
+        updateFrameBarState();
+        applyAppPaletteToCSS();
+        showSplashIfNeeded();
+    }
 
-    // Apply global palette CSS variables
-    applyAppPaletteToCSS();
+    function loadDemoProject() {
+        if (!window.fetch) return null;
+        return fetch('Mocking-Board-Demo.json')
+            .then((resp) => {
+                if (!resp.ok) throw new Error('Demo load failed');
+                return resp.json();
+            })
+            .then((imported) => {
+                applyImportedData(imported, { alertOnSuccess: false });
+            })
+            .catch(() => {
+                // Ignore demo load failures and fall back to empty canvas.
+            });
+    }
 
-    // Trigger splash for first-time users, then onboarding
-    showSplashIfNeeded();
+    const demoLoadPromise = loadDemoProject();
+    if (demoLoadPromise && typeof demoLoadPromise.finally === 'function') {
+        demoLoadPromise.finally(() => {
+            finalizeInitialLayout();
+        });
+    } else {
+        finalizeInitialLayout();
+    }
 
     // --- Zoom controls ---
     if (zoomOutBtn && zoomInBtn && zoomFitBtn) {
@@ -3666,6 +3689,52 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof saveState === 'function' && canvas) saveState(canvas);
     }
 
+    function applyImportedData(imported, { alertOnSuccess = true } = {}) {
+        if (imported && imported.project) {
+            frames = Array.isArray(imported.frames) && imported.frames.length
+                ? imported.frames
+                : [snapshotCurrentCanvas()];
+            const maxIndex = Math.max(0, frames.length - 1);
+            const desiredIndex = typeof imported.currentFrameIndex === 'number' ? imported.currentFrameIndex : 0;
+            currentFrameIndex = Math.min(Math.max(0, desiredIndex), maxIndex);
+            savedProjectThemeIndex = typeof imported.themeIndex === 'number' ? imported.themeIndex : null;
+            if (imported.canvasSize && imported.canvasSize.width && imported.canvasSize.height) {
+                const parsedWidth = parseInt(imported.canvasSize.width, 10);
+                const parsedHeight = parseInt(imported.canvasSize.height, 10);
+                if (isFinite(parsedWidth) && isFinite(parsedHeight)) {
+                    setCanvasDesignSize(parsedWidth, parsedHeight);
+                }
+            }
+            loadFrame(currentFrameIndex);
+            if (savedProjectThemeIndex !== null) {
+                applyTheme(savedProjectThemeIndex);
+            }
+            if (alertOnSuccess) alert('Project loaded!');
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            return true;
+        }
+        if (imported && imported.elements) {
+            if (Array.isArray(imported.elements)) {
+                imported.elements.forEach(elData => {
+                    if (!elData.dataset) elData.dataset = {};
+                    if (!elData.dataset.uid && !elData.dataset['uid']) {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                        const uid = Array.from({ length: 9 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+                        elData.dataset.uid = uid;
+                    }
+                });
+            }
+            frames = [imported];
+            currentFrameIndex = 0;
+            loadFrame(0);
+            if (alertOnSuccess) alert('Layout loaded!');
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+            return true;
+        }
+        if (alertOnSuccess) alert('Invalid project or layout file.');
+        return false;
+    }
+
     // Restore event listeners for load, clear, and export buttons
     if (loadBtn) {
         loadBtn.addEventListener('click', () => {
@@ -3679,39 +3748,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const imported = JSON.parse(e.target.result);
-                    if (imported && imported.project) {
-                        // New project format
-                        frames = Array.isArray(imported.frames) && imported.frames.length
-                            ? imported.frames
-                            : [snapshotCurrentCanvas()];
-                        currentFrameIndex = imported.currentFrameIndex || 0;
-                        savedProjectThemeIndex = typeof imported.themeIndex === 'number' ? imported.themeIndex : null;
-                        loadFrame(currentFrameIndex);
-                        if (savedProjectThemeIndex !== null) {
-                            applyTheme(savedProjectThemeIndex);
-                        }
-                        alert('Project loaded!');
-                        if (typeof saveState === 'function' && canvas) saveState(canvas);
-                    } else if (imported && imported.elements) {
-                        // Legacy single-layout format
-                        if (Array.isArray(imported.elements)) {
-                            imported.elements.forEach(elData => {
-                                if (!elData.dataset) elData.dataset = {};
-                                if (!elData.dataset.uid && !elData.dataset['uid']) {
-                                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                                    const uid = Array.from({ length: 9 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
-                                    elData.dataset.uid = uid;
-                                }
-                            });
-                        }
-                        frames = [imported];
-                        currentFrameIndex = 0;
-                        loadFrame(0);
-                        alert('Layout loaded!');
-                        if (typeof saveState === 'function' && canvas) saveState(canvas);
-                    } else {
-                        alert('Invalid project or layout file.');
-                    }
+                    applyImportedData(imported);
                 };
                 reader.readAsText(file);
             }
