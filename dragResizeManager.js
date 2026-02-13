@@ -11,14 +11,37 @@ let resizeAnimationFrame = null;
 let dragEvent = null;
 let resizeEvent = null;
 
+/** Get the scale factor of the canvas CSS transform */
+function getScale(el) {
+    if (!el) return 1;
+    const canvas = el.closest('.canvas') || el.parentElement;
+    if (!canvas) return 1;
+    const rect = canvas.getBoundingClientRect();
+    return rect.width / (canvas.offsetWidth || 1);
+}
+
+/** Convert screen coords to canvas coords */
+function screenToCanvasCoords(el, screenX, screenY) {
+    const canvas = el.closest('.canvas') || el.parentElement;
+    if (!canvas) return { x: screenX, y: screenY };
+    const rect = canvas.getBoundingClientRect();
+    const scale = rect.width / (canvas.offsetWidth || 1);
+    return {
+        x: (screenX - rect.left) / scale,
+        y: (screenY - rect.top) / scale,
+    };
+}
+
 export function startDragging(e, isLocked, setDragged, setOffset) {
     if (e.target.className === 'resize-handle' || isLocked()) return;
     draggedElement = e.target.closest('.element');
     setDragged(draggedElement);
-    setOffset({
-        x: e.clientX - draggedElement.offsetLeft,
-        y: e.clientY - draggedElement.offsetTop
-    });
+    const canvasPos = screenToCanvasCoords(draggedElement, e.clientX, e.clientY);
+    offset = {
+        x: canvasPos.x - draggedElement.offsetLeft,
+        y: canvasPos.y - draggedElement.offsetTop
+    };
+    setOffset(offset);
     dragEvent = e;
     dragAnimationFrame = requestAnimationFrame(dragRAF);
     document.addEventListener('pointermove', dragRAFHandler);
@@ -31,8 +54,9 @@ function dragRAFHandler(e) {
 
 function dragRAF() {
     if (!draggedElement || !dragEvent) return;
-    draggedElement.style.left = `${dragEvent.clientX - offset.x}px`;
-    draggedElement.style.top = `${dragEvent.clientY - offset.y}px`;
+    const canvasPos = screenToCanvasCoords(draggedElement, dragEvent.clientX, dragEvent.clientY);
+    draggedElement.style.left = `${canvasPos.x - offset.x}px`;
+    draggedElement.style.top = `${canvasPos.y - offset.y}px`;
     dragAnimationFrame = requestAnimationFrame(dragRAF);
 }
 
@@ -63,8 +87,9 @@ function resizeRAFHandler(e) {
 
 function resizeRAF() {
     if (!isResizing || !resizeEvent) return;
-    const newWidth = resizeEvent.clientX - selectedElement.offsetLeft;
-    const newHeight = resizeEvent.clientY - selectedElement.offsetTop;
+    const canvasPos = screenToCanvasCoords(selectedElement, resizeEvent.clientX, resizeEvent.clientY);
+    const newWidth = canvasPos.x - selectedElement.offsetLeft;
+    const newHeight = canvasPos.y - selectedElement.offsetTop;
     selectedElement.style.width = `${newWidth}px`;
     selectedElement.style.height = `${newHeight}px`;
     resizeAnimationFrame = requestAnimationFrame(resizeRAF);

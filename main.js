@@ -4,8 +4,18 @@ import { hexToRgba, rgbToHex, getRandomColor, startColorTransitionAnimation, sta
 import { openPopup, closePopup, setupPopupEvents } from './popupManager.js';
 import { startDragging, startResizing } from './dragResizeManager.js';
 import { setupMediaDrop, setupUnsplashSearch } from './mediaManager.js';
+import { CLARIFY_SYSTEM_PROMPT, GENERATE_SYSTEM_PROMPT, importSignageV2, getProxyUrl, MODEL, GENERATION_MODEL, wrapUserPrompt, GOOGLE_FONT_FAMILIES } from './signageSchemaV2.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Load Google Fonts for signage generation ---
+    if (GOOGLE_FONT_FAMILIES && GOOGLE_FONT_FAMILIES.length) {
+        const families = GOOGLE_FONT_FAMILIES.map(f => 'family=' + f.replace(/ /g, '+')).join('&');
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+        document.head.appendChild(link);
+    }
+
     // --- Global palette (Bright Amber / Black / Grey Olive / Old Gold / Olive Bark) ---
     const BASE_PALETTE = {
         brightAmber: '#F5C919'
@@ -19,6 +29,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn = document.getElementById('clear-btn');
     const exportBtn = document.getElementById('export-btn');
     const templatesBtn = document.getElementById('templates-btn');
+    const libraryBtn = document.getElementById('library-btn');
+    const resizeBtn = document.getElementById('resize-btn');
+    const variationBtn = document.getElementById('variation-btn');
     const fileInput = document.getElementById('file-input');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
     const lockBtn = document.getElementById('lock-btn');
@@ -45,7 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLabel = document.getElementById('zoom-label');
     const groupBtn = document.getElementById('group-btn');
     const ungroupBtn = document.getElementById('ungroup-btn');
-    const signageModeBtn = document.getElementById('signage-mode-btn');
+    const presentBtn = document.getElementById('present-btn');
+    const editModeBtn = document.getElementById('edit-mode-btn');
+    const advancedBtn = document.getElementById('advanced-btn');
+    const advancedPanel = document.getElementById('advanced-panel');
     const signageExitBtn = document.getElementById('signage-exit-btn');
     const animationsPanel = null;
     const animationsList = null;
@@ -259,6 +275,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let zoomLevel = 1;
     const signageReasons = new Set();
     let signageActive = false;
+    let editModeTimeoutId = null;
+    const EDIT_MODE_TIMEOUT_MS = 12000;
+
+    // --- Canvas artboard dimensions (fixed design size) ---
+    let canvasDesignWidth = 1920;
+    let canvasDesignHeight = 1080;
+
+    // --- Fullscreen panning state ---
+    let panX = 0;   // px offset from centered position
+    let panY = 0;
+    let _panDragging = false;
+    let _panStartX = 0;
+    let _panStartY = 0;
+    let _panStartOffsetX = 0;
+    let _panStartOffsetY = 0;
 
     function getFrameDuration(frame) {
         if (!frame) return DEFAULT_FRAME_DURATION;
@@ -281,19 +312,75 @@ document.addEventListener('DOMContentLoaded', () => {
         if (bodyEl) {
             bodyEl.classList.toggle('signage-mode-active', isActive);
         }
-        if (signageModeBtn) {
-            signageModeBtn.disabled = isActive;
-            signageModeBtn.textContent = isActive ? 'Signage Active' : 'Show Signage';
-            signageModeBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        if (presentBtn) {
+            const label = presentBtn.querySelector('.hero-fab-label');
+            const icon = presentBtn.querySelector('.hero-fab-icon');
+            if (isActive) {
+                if (label) label.textContent = 'Exit';
+                if (icon) icon.textContent = '⏹';
+            } else {
+                if (label) label.textContent = 'Present';
+                if (icon) icon.textContent = '▶';
+            }
+            presentBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         }
         if (signageExitBtn) {
             signageExitBtn.setAttribute('aria-hidden', isActive ? 'false' : 'true');
         }
     }
 
+    function updateFrameBarState() {
+        const bodyEl = document.body;
+        if (!bodyEl) return;
+        bodyEl.classList.toggle('has-multiframe', frames.length > 1);
+        bodyEl.classList.toggle('is-playing', isPlayMode);
+    }
+
+    function setEditMode(active) {
+        const bodyEl = document.body;
+        if (!bodyEl) return;
+        bodyEl.classList.toggle('edit-mode', active);
+        if (editModeBtn) {
+            const label = editModeBtn.querySelector('.hero-fab-label');
+            if (label) label.textContent = active ? 'Customizing' : 'Customize';
+            editModeBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+        if (!active && editModeTimeoutId) {
+            clearTimeout(editModeTimeoutId);
+            editModeTimeoutId = null;
+        }
+    }
+
+    function scheduleEditModeTimeout() {
+        if (editModeTimeoutId) clearTimeout(editModeTimeoutId);
+        editModeTimeoutId = setTimeout(() => {
+            if (signageActive) return;
+            if (document.body.classList.contains('advanced-open')) return;
+            setEditMode(false);
+        }, EDIT_MODE_TIMEOUT_MS);
+    }
+
+    function toggleAdvancedPanel(active) {
+        const bodyEl = document.body;
+        if (!bodyEl) return;
+        bodyEl.classList.toggle('advanced-open', active);
+        if (advancedPanel) advancedPanel.setAttribute('aria-hidden', active ? 'false' : 'true');
+        if (advancedBtn) advancedBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+
     function enterSignageMode(reason = 'manual') {
         signageReasons.add(reason);
+        setEditMode(false);
+        toggleAdvancedPanel(false);
+        // Reset pan offset so canvas starts centered
+        panX = 0;
+        panY = 0;
         updateSignageModeState();
+        // Transform will be applied by fullscreenchange handler after layout settles
+        // Only apply immediately if we're already in fullscreen (re-enter case)
+        if (document.fullscreenElement) {
+            requestAnimationFrame(() => applySignageCenterTransform());
+        }
     }
 
     function exitSignageMode(reason) {
@@ -303,9 +390,12 @@ document.addEventListener('DOMContentLoaded', () => {
             signageReasons.clear();
         }
         updateSignageModeState();
+        clearSignageCenterTransform();
     }
 
     updateSignageModeState();
+    setEditMode(false);
+    toggleAdvancedPanel(false);
 
     function applyAppPaletteToCSS() {
         const root = document.documentElement;
@@ -325,6 +415,113 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             frameDurationInput.value = duration;
         }
+        updateFrameBarState();
+    }
+
+    // --- Center point (auto-calculated, no manual marker) ---
+
+    function updateCenterMarkerPosition() {
+        // No-op: center point is now auto-calculated, no visual marker
+    }
+
+    // Legacy — kept in case other code references it, but no longer called on enter signage
+    function calculateCenterOfWeight() {
+        // No-op — replaced by direct pan/drag in fullscreen
+    }
+
+    // Center point is auto-calculated on enter signage — no drag UI needed
+
+    // Apply scale-to-fit + pan transform for fullscreen/signage mode
+    function applySignageCenterTransform() {
+        if (!canvas || !canvasContainer) return;
+        const containerW = canvasContainer.clientWidth || window.innerWidth;
+        const containerH = canvasContainer.clientHeight || window.innerHeight;
+        const cw = canvasDesignWidth || 1920;
+        const ch = canvasDesignHeight || 1080;
+
+        // Scale to fit
+        const scale = Math.min(containerW / cw, containerH / ch, 2.0);
+
+        // Center the canvas, then apply user pan offset
+        const scaledW = cw * scale;
+        const scaledH = ch * scale;
+        const offsetX = (containerW - scaledW) / 2 + panX;
+        const offsetY = (containerH - scaledH) / 2 + panY;
+
+        canvas.style.transformOrigin = 'top left';
+        canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+        canvas.style.borderRadius = '0';
+        canvas.style.boxShadow = 'none';
+
+        // "Infinite background" — extend the canvas background onto the container
+        const canvasBg = canvas.style.background || canvas.style.backgroundColor || '';
+        if (canvasBg) {
+            canvasContainer.style.background = canvasBg;
+        } else {
+            const computed = getComputedStyle(canvas);
+            canvasContainer.style.background = computed.background || computed.backgroundColor || '#000';
+        }
+    }
+
+    function clearSignageCenterTransform() {
+        if (!canvas) return;
+        // Reset pan state
+        panX = 0;
+        panY = 0;
+        // Reset canvas transform directly — don't rely on fitCanvasToContainer
+        // which may bail if fullscreen state hasn't fully cleared yet
+        canvas.style.transformOrigin = 'center center';
+        canvas.style.transform = '';
+        canvas.style.borderRadius = '';
+        canvas.style.boxShadow = '';
+        // Also reset the infinite-background extension on the container
+        if (canvasContainer) {
+            canvasContainer.style.background = '';
+        }
+        // Re-fit after a tick so the DOM has settled
+        requestAnimationFrame(() => fitCanvasToContainer());
+    }
+
+    /** Get the current CSS transform scale applied to the canvas (screen / canvas ratio) */
+    function getCanvasScale() {
+        if (!canvas) return 1;
+        const rect = canvas.getBoundingClientRect();
+        return rect.width / (canvas.offsetWidth || canvasDesignWidth || 1920);
+    }
+
+    /** Convert a screen-space point to canvas-coordinate-space point */
+    function screenToCanvas(screenX, screenY) {
+        const rect = canvas.getBoundingClientRect();
+        const scale = getCanvasScale();
+        return {
+            x: (screenX - rect.left) / scale,
+            y: (screenY - rect.top) / scale,
+        };
+    }
+
+    function setCanvasDesignSize(w, h) {
+        canvasDesignWidth = w || 1920;
+        canvasDesignHeight = h || 1080;
+        if (canvas) {
+            canvas.style.width = canvasDesignWidth + 'px';
+            canvas.style.height = canvasDesignHeight + 'px';
+        }
+        fitCanvasToContainer();
+    }
+
+    function fitCanvasToContainer() {
+        if (!canvas || !canvasContainer) return;
+        // In fullscreen or signage mode, the center transform handles scaling
+        if (document.fullscreenElement || signageActive) return;
+        const containerW = canvasContainer.clientWidth;
+        const containerH = canvasContainer.clientHeight;
+        if (!containerW || !containerH) return;
+        const padding = 32; // visual breathing room
+        const availW = containerW - padding;
+        const availH = containerH - padding;
+        const scale = Math.min(availW / canvasDesignWidth, availH / canvasDesignHeight, 1);
+        canvas.style.transformOrigin = 'center center';
+        canvas.style.transform = `scale(${scale})`;
     }
 
     function applyZoom(level) {
@@ -335,24 +532,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (zoomLabel) zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
     }
 
+    updateCenterMarkerPosition();
+
+    // --- Initialize canvas artboard and auto-fit ---
+    setCanvasDesignSize(canvasDesignWidth, canvasDesignHeight);
+    window.addEventListener('resize', () => {
+        if (!document.fullscreenElement && !signageActive) {
+            fitCanvasToContainer();
+        }
+    });
+
     // --- Onboarding tour logic ---
     const ONBOARDING_KEY = 'mockingBoard_seenOnboarding_v1';
     const onboardingSteps = [
         {
-            title: 'Welcome to Mocking Board',
-            body: 'Use the sidebar on the left to add text, shapes, media, and more to the canvas. Drag things around to quickly mock ideas.',
+            title: 'Create Signage Fast',
+            body: 'No sign-in required. Use Create Signage to get a unique layout in seconds, then customize only if you want.',
         },
         {
-            title: 'Canvas and Frames',
-            body: 'The central canvas is your stage. Use the frame bar at the bottom to add frames and build multi-step storyboards.',
+            title: 'Presentation First',
+            body: 'Show Signage and Fullscreen are the primary actions. Use them when you are ready to present.',
         },
         {
-            title: 'Editing and Animation',
-            body: 'Right-click any element for options like color, gradient, motion, and media. Use the inline text toolbar to style headings and body copy.',
+            title: 'Customize Only When Needed',
+            body: 'Tap Customize Signage to reveal editing tools. Right-click elements for color, gradients, and motion.',
         },
         {
-            title: 'Undo and Redo',
-            body: 'Lean on Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) while experimenting so it feels safe to try bold ideas.',
+            title: 'Multi-Frame When You Need It',
+            body: 'Add frames for slideshows. Playback appears only when multiple frames exist.',
         }
     ];
     let onboardingIndex = 0;
@@ -754,6 +961,75 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // --- Element library presets ---
+    const elementLibraryPresets = [
+        {
+            key: 'heroSplit',
+            name: 'Hero Split',
+            desc: 'Big headline left, details right.',
+            elements: [
+                { type: 'rectangle', x: 4, y: 8, w: 56, h: 70, shapeColor: '#ffffff', opacity: 0.85, borderRadius: '22px', boxShadow: '0 20px 50px rgba(15,23,42,0.16)', zIndex: 1 },
+                { type: 'header', x: 8, y: 12, w: 40, h: 18, text: 'Grand Opening', color: '#0f172a', fontSize: '96px', fontFamily: 'Old Standard TT, serif', zIndex: 2 },
+                { type: 'paragraph', x: 60, y: 26, w: 32, h: 14, text: 'Sat • 7 PM • Main Hall', color: '#1f2937', fontSize: '26px', fontFamily: 'Roboto, sans-serif', zIndex: 2 },
+                { type: 'rectangle', x: 60, y: 20, w: 18, h: 2.5, shapeColor: '#f5c919', borderRadius: '999px', zIndex: 2 }
+            ]
+        },
+        {
+            key: 'glassCard',
+            name: 'Glass Card',
+            desc: 'Frosted panel with a clean stack.',
+            elements: [
+                { type: 'rectangle', x: 8, y: 12, w: 64, h: 62, shapeColor: '#ffffff', opacity: 0.2, borderRadius: '26px', backdropFilter: 'blur(18px)', webkitBackdropFilter: 'blur(18px)', boxShadow: '0 18px 45px rgba(15,23,42,0.22)', zIndex: 1 },
+                { type: 'header', x: 14, y: 18, w: 52, h: 18, text: 'Winter Gala', color: '#f8fafc', fontSize: '86px', fontFamily: 'Playfair Display, serif', zIndex: 2 },
+                { type: 'paragraph', x: 14, y: 36, w: 50, h: 12, text: 'Tickets • Live Jazz • 8 PM', color: '#e2e8f0', fontSize: '24px', fontFamily: 'Lora, serif', zIndex: 2 }
+            ]
+        },
+        {
+            key: 'lRail',
+            name: 'Left Rail',
+            desc: 'Bold rail with asym text.',
+            elements: [
+                { type: 'rectangle', x: 6, y: 6, w: 2.5, h: 78, shapeColor: '#0f172a', borderRadius: '8px', zIndex: 1 },
+                { type: 'rectangle', x: 6, y: 74, w: 40, h: 2.5, shapeColor: '#f5c919', borderRadius: '8px', zIndex: 1 },
+                { type: 'header', x: 12, y: 16, w: 52, h: 18, text: 'Design Week', color: '#0f172a', fontSize: '92px', fontFamily: 'Montserrat, sans-serif', zIndex: 2 },
+                { type: 'paragraph', x: 12, y: 36, w: 40, h: 12, text: 'Workshops • Talks • Expo', color: '#334155', fontSize: '24px', fontFamily: 'Roboto, sans-serif', zIndex: 2 }
+            ]
+        },
+        {
+            key: 'stickerBurst',
+            name: 'Sticker Burst',
+            desc: 'Playful shapes with a punch.',
+            elements: [
+                { type: 'circle', x: 66, y: 6, w: 18, h: 18, shapeColor: '#f43f5e', opacity: 0.85, zIndex: 1 },
+                { type: 'triangle', x: 62, y: 26, w: 12, h: 14, shapeColor: '#f59e0b', zIndex: 1, transform: 'rotate(-18deg)' },
+                { type: 'rectangle', x: 8, y: 22, w: 44, h: 22, shapeColor: '#0ea5e9', borderRadius: '16px', zIndex: 1 },
+                { type: 'header', x: 12, y: 24, w: 38, h: 14, text: 'Kids Fest', color: '#ffffff', fontSize: '82px', fontFamily: 'Permanent Marker, sans-serif', zIndex: 2 },
+                { type: 'paragraph', x: 12, y: 38, w: 34, h: 10, text: 'Games • Music • Art', color: '#fef3c7', fontSize: '22px', fontFamily: 'Poppins, sans-serif', zIndex: 2 }
+            ]
+        },
+        {
+            key: 'ticketStack',
+            name: 'Ticket Stack',
+            desc: 'Retro card with badge.',
+            elements: [
+                { type: 'rectangle', x: 10, y: 14, w: 54, h: 56, shapeColor: '#fff7ed', borderRadius: '18px', border: '2px dashed #d97706', boxShadow: '0 16px 38px rgba(15,23,42,0.18)', zIndex: 1 },
+                { type: 'header', x: 16, y: 20, w: 44, h: 16, text: 'Movie Night', color: '#7c2d12', fontSize: '76px', fontFamily: 'Old Standard TT, serif', zIndex: 2 },
+                { type: 'paragraph', x: 16, y: 36, w: 40, h: 10, text: 'Fri • 8 PM • Rooftop', color: '#9a3412', fontSize: '22px', fontFamily: 'Roboto, sans-serif', zIndex: 2 },
+                { type: 'circle', x: 60, y: 18, w: 12, h: 12, shapeColor: '#f59e0b', zIndex: 2 }
+            ]
+        },
+        {
+            key: 'cornerStack',
+            name: 'Corner Stack',
+            desc: 'Top-left hero, bottom-right details.',
+            elements: [
+                { type: 'header', x: 8, y: 10, w: 50, h: 18, text: 'Community Expo', color: '#0f172a', fontSize: '88px', fontFamily: 'Raleway, sans-serif', zIndex: 2 },
+                { type: 'paragraph', x: 62, y: 66, w: 30, h: 12, text: 'Meet local makers and startups', color: '#334155', fontSize: '22px', fontFamily: 'Roboto, sans-serif', zIndex: 2 },
+                { type: 'rectangle', x: 62, y: 60, w: 18, h: 2.5, shapeColor: '#0f172a', borderRadius: '999px', zIndex: 2 }
+            ]
+        }
+    ];
+
     function snapshotCurrentCanvas() {
         const elements = Array.from(canvas.querySelectorAll('.element')).map(el => ({
             type: el.getAttribute('data-type') || null,
@@ -762,12 +1038,27 @@ document.addEventListener('DOMContentLoaded', () => {
             width: el.style.width,
             height: el.style.height,
             backgroundColor: el.style.backgroundColor,
+            background: el.style.background,
             color: el.style.color,
             fontSize: el.style.fontSize,
             fontFamily: el.style.fontFamily,
             zIndex: el.style.zIndex,
             border: el.style.border,
             borderColor: el.style.borderColor,
+            borderRadius: el.style.borderRadius,
+            opacity: el.style.opacity,
+            boxShadow: el.style.boxShadow,
+            backdropFilter: el.style.backdropFilter,
+            webkitBackdropFilter: el.style.webkitBackdropFilter || '',
+            filter: el.style.filter,
+            overflow: el.style.overflow,
+            display: el.style.display,
+            alignItems: el.style.alignItems,
+            justifyContent: el.style.justifyContent,
+            transform: el.style.transform,
+            transformOrigin: el.style.transformOrigin,
+            transition: el.style.transition,
+            mixBlendMode: el.style.mixBlendMode,
             rotation: el.dataset.rotation || 0,
             innerHTML: el.innerHTML,
             dataset: { ...el.dataset },
@@ -779,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 width: canvas.style.width,
                 height: canvas.style.height,
             },
-            duration: getFrameDuration(frames[currentFrameIndex])
+            duration: getFrameDuration(frames[currentFrameIndex]),
         };
     }
 
@@ -788,6 +1079,7 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.innerHTML = '<div id="grid" class="grid"></div>';
         if (frame) {
             ensureFrameDuration(frame);
+            // (center point no longer saved — pan resets each present)
         }
         if (!frame || !frame.elements) {
             reattachEventListeners();
@@ -802,12 +1094,27 @@ document.addEventListener('DOMContentLoaded', () => {
             element.style.width = elData.width;
             element.style.height = elData.height;
             element.style.backgroundColor = elData.backgroundColor;
+            if (elData.background) element.style.background = elData.background;
             element.style.color = elData.color;
             element.style.fontSize = elData.fontSize;
             element.style.fontFamily = elData.fontFamily;
             element.style.zIndex = elData.zIndex;
             element.style.border = elData.border;
             element.style.borderColor = elData.borderColor;
+            if (elData.borderRadius) element.style.borderRadius = elData.borderRadius;
+            if (elData.opacity) element.style.opacity = elData.opacity;
+            if (elData.boxShadow) element.style.boxShadow = elData.boxShadow;
+            if (elData.backdropFilter) element.style.backdropFilter = elData.backdropFilter;
+            if (elData.webkitBackdropFilter) element.style.webkitBackdropFilter = elData.webkitBackdropFilter;
+            if (elData.filter) element.style.filter = elData.filter;
+            if (elData.overflow) element.style.overflow = elData.overflow;
+            if (elData.display) element.style.display = elData.display;
+            if (elData.alignItems) element.style.alignItems = elData.alignItems;
+            if (elData.justifyContent) element.style.justifyContent = elData.justifyContent;
+            if (elData.transform) element.style.transform = elData.transform;
+            if (elData.transformOrigin) element.style.transformOrigin = elData.transformOrigin;
+            if (elData.transition) element.style.transition = elData.transition;
+            if (elData.mixBlendMode) element.style.mixBlendMode = elData.mixBlendMode;
             element.innerHTML = elData.innerHTML;
             if (elData.dataset) {
                 Object.keys(elData.dataset).forEach(key => {
@@ -827,6 +1134,10 @@ document.addEventListener('DOMContentLoaded', () => {
             attachElementInteractions(element);
         });
         canvas.style.background = frame.canvas && frame.canvas.background ? frame.canvas.background : canvas.style.background;
+        // Restore canvas artboard dimensions from frame
+        if (frame.canvas && frame.canvas.width && frame.canvas.height) {
+            setCanvasDesignSize(parseInt(frame.canvas.width, 10), parseInt(frame.canvas.height, 10));
+        }
         reattachEventListeners();
         if (typeof restoreElementAnimations === 'function') restoreElementAnimations();
         updateFrameLabel();
@@ -871,6 +1182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize first empty frame
     frames[0] = snapshotCurrentCanvas();
     updateFrameLabel();
+    updateFrameBarState();
 
     // Apply global palette CSS variables
     applyAppPaletteToCSS();
@@ -897,18 +1209,106 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (signageModeBtn) {
-        signageModeBtn.addEventListener('click', () => {
-            enterSignageMode('manual');
+    if (presentBtn && canvasContainer) {
+        presentBtn.addEventListener('click', async () => {
+            if (signageActive || document.fullscreenElement) {
+                // Exit: leave fullscreen and signage
+                if (document.fullscreenElement) {
+                    await document.exitFullscreen();
+                }
+                exitSignageMode('manual');
+                if (isPlayMode) exitPlayMode();
+            } else {
+                // Enter: signage + fullscreen together
+                enterSignageMode('manual');
+                try {
+                    await canvasContainer.requestFullscreen();
+                } catch (_) { /* ignore if denied */ }
+            }
+        });
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && signageActive) {
+                // User pressed Escape or exited fullscreen externally
+                exitSignageMode('manual');
+                if (isPlayMode) exitPlayMode();
+                return; // exitSignageMode already calls clearSignageCenterTransform
+            }
+            if (document.fullscreenElement && signageActive) {
+                // Entered fullscreen — apply transform after layout settles
+                setTimeout(() => applySignageCenterTransform(), 150);
+            } else if (!document.fullscreenElement) {
+                // Fully exited — ensure canvas is restored
+                clearSignageCenterTransform();
+            }
+        });
+    }
+
+    if (editModeBtn) {
+        editModeBtn.addEventListener('click', () => {
+            const isActive = document.body.classList.contains('edit-mode');
+            setEditMode(!isActive);
+            if (!isActive) scheduleEditModeTimeout();
+        });
+    }
+
+    if (advancedBtn) {
+        advancedBtn.addEventListener('click', () => {
+            const isOpen = document.body.classList.contains('advanced-open');
+            toggleAdvancedPanel(!isOpen);
+        });
+    }
+
+    // ── Drag-to-pan canvas in fullscreen/signage mode ──
+    if (canvasContainer) {
+        canvasContainer.addEventListener('pointerdown', (e) => {
+            if (!signageActive) return;
+            // Don't interfere with the exit button
+            if (e.target.closest('.signage-exit-btn')) return;
+            _panDragging = true;
+            _panStartX = e.clientX;
+            _panStartY = e.clientY;
+            _panStartOffsetX = panX;
+            _panStartOffsetY = panY;
+            canvasContainer.setPointerCapture(e.pointerId);
+            canvasContainer.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        canvasContainer.addEventListener('pointermove', (e) => {
+            if (!_panDragging) return;
+            panX = _panStartOffsetX + (e.clientX - _panStartX);
+            panY = _panStartOffsetY + (e.clientY - _panStartY);
+            applySignageCenterTransform();
+        });
+        const endPan = (e) => {
+            if (!_panDragging) return;
+            _panDragging = false;
+            canvasContainer.style.cursor = '';
+        };
+        canvasContainer.addEventListener('pointerup', endPan);
+        canvasContainer.addEventListener('pointercancel', endPan);
+    }
+
+    // Auto-enter edit mode on canvas interaction, then fade back out
+    if (canvasContainer) {
+        canvasContainer.addEventListener('pointerdown', () => {
+            if (signageActive) return;
+            setEditMode(true);
+            scheduleEditModeTimeout();
+        });
+        canvasContainer.addEventListener('keydown', () => {
+            if (signageActive) return;
+            setEditMode(true);
+            scheduleEditModeTimeout();
         });
     }
 
     if (signageExitBtn) {
         signageExitBtn.addEventListener('click', () => {
             exitSignageMode();
-            if (isPlayMode) {
-                exitPlayMode();
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
             }
+            if (isPlayMode) exitPlayMode();
         });
     }
 
@@ -918,6 +1318,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const nextIndex = Math.max(0, currentFrameIndex - 1);
             currentFrameIndex = nextIndex;
             loadFrame(currentFrameIndex);
+            updateFrameBarState();
         });
     }
     if (frameNextBtn) {
@@ -926,6 +1327,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const nextIndex = Math.min(frames.length - 1, currentFrameIndex + 1);
             currentFrameIndex = nextIndex;
             loadFrame(currentFrameIndex);
+            updateFrameBarState();
         });
     }
     if (frameAddBtn) {
@@ -939,6 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             frames.push(emptyFrame);
             currentFrameIndex = frames.length - 1;
             loadFrame(currentFrameIndex);
+            updateFrameBarState();
         });
     }
 
@@ -962,6 +1365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isPlayMode = true;
         enterSignageMode('play');
         canvasContainer.classList.add('play-mode');
+        updateFrameBarState();
         if (playModeBtn) {
             playModeBtn.textContent = 'Pause';
             playModeBtn.classList.add('is-playing');
@@ -988,6 +1392,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isPlayMode = false;
         canvasContainer.classList.remove('play-mode');
         exitSignageMode('play');
+        updateFrameBarState();
         if (playModeBtn) {
             playModeBtn.textContent = 'Play';
             playModeBtn.classList.remove('is-playing');
@@ -1023,6 +1428,24 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFrameIndex = 0;
             loadFrame(currentFrameIndex);
             if (typeof saveState === 'function' && canvas) saveState(canvas);
+        });
+    }
+
+    if (libraryBtn) {
+        libraryBtn.addEventListener('click', () => {
+            openElementLibraryPopup();
+        });
+    }
+
+    if (resizeBtn) {
+        resizeBtn.addEventListener('click', () => {
+            openResizePopup();
+        });
+    }
+
+    if (variationBtn) {
+        variationBtn.addEventListener('click', () => {
+            openVariationPopup();
         });
     }
 
@@ -1122,7 +1545,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newSize = prompt("Enter the new font size (e.g., 16px, 2em, 150%):");
                 if (newSize) {
                     selectedElement.style.fontSize = newSize;
-                    saveState();
+                    if (typeof saveState === 'function' && canvas) saveState(canvas);
                 }
             }
         } else if (id === 'fontColor') {
@@ -1134,7 +1557,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 editableElements.forEach(el => {
                     el.style.textAlign = alignments[alignmentIndex];
                 });
-                saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         } else if (id === 'changeFont') {
             if (selectedElement) {
@@ -1143,12 +1566,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 editableElements.forEach(el => {
                     el.style.fontFamily = fonts[fontIndex];
                 });
-                saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         } else if (id === 'makeTransparent') {
             if (selectedElement) {
                 selectedElement.style.backgroundColor = 'rgba(43, 38, 34, 0)';
-                saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         } else if (id === 'createColorTransition') {
             if (selectedElement) openColorTransitionPopup();
@@ -1202,6 +1625,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Legacy generateUID/createElement logic has been replaced by elementManager.createElement
 
+    // --- Compose CSS transform from rotate / scale / translateX ---
+    function setElementTransform(el, { rotate, scale, translateX } = {}) {
+        const parts = [];
+        if (typeof translateX === 'number' && translateX !== 0) parts.push(`translateX(${translateX}px)`);
+        if (typeof scale === 'number' && scale !== 1) parts.push(`scale(${scale})`);
+        if (typeof rotate === 'number' && rotate !== 0) parts.push(`rotate(${rotate}deg)`);
+        el.style.transform = parts.length ? parts.join(' ') : '';
+    }
+
     // --- Interactive rotation logic ---
     let rotatingElement = null;
     let initialAngle = 0;
@@ -1238,7 +1670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function stopRotating() {
         if (rotatingElement) {
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
         rotatingElement = null;
         document.body.style.cursor = '';
@@ -1264,9 +1696,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         draggedElement = targetElement;
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
         offset = {
-            x: e.clientX - draggedElement.offsetLeft,
-            y: e.clientY - draggedElement.offsetTop
+            x: canvasPos.x - draggedElement.offsetLeft,
+            y: canvasPos.y - draggedElement.offsetTop
         };
 
         // Long press detection for touch screens
@@ -1298,13 +1731,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!draggedElement) return;
         const now = Date.now();
         if (now - lastPointerMoveTime > 50) { // Throttle to 20 FPS
-            let newLeft = e.clientX - offset.x;
-            let newTop = e.clientY - offset.y;
+            const canvasPos = screenToCanvas(e.clientX, e.clientY);
+            let newLeft = canvasPos.x - offset.x;
+            let newTop = canvasPos.y - offset.y;
 
             const canvasRect = canvas.getBoundingClientRect();
+            const scale = getCanvasScale();
             const elRect = draggedElement.getBoundingClientRect();
-            const elWidth = elRect.width;
-            const elHeight = elRect.height;
+            const elWidth = elRect.width / scale;
+            const elHeight = elRect.height / scale;
             const snapThreshold = 6;
 
             // Grid snapping
@@ -1336,12 +1771,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             others.forEach(el => {
                 const r = el.getBoundingClientRect();
-                const oLeft = r.left - canvasRect.left;
-                const oRight = oLeft + r.width;
-                const oHCenter = oLeft + r.width / 2;
-                const oTop = r.top - canvasRect.top;
-                const oBottom = oTop + r.height;
-                const oVCenter = oTop + r.height / 2;
+                const oLeft = (r.left - canvasRect.left) / scale;
+                const oRight = oLeft + r.width / scale;
+                const oHCenter = oLeft + r.width / (2 * scale);
+                const oTop = (r.top - canvasRect.top) / scale;
+                const oBottom = oTop + r.height / scale;
+                const oVCenter = oTop + r.height / (2 * scale);
 
                 // Vertical snapping (x-axis): left, center, right
                 if (Math.abs(target.left - oLeft) <= snapThreshold) {
@@ -1404,7 +1839,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startMarquee(e) {
         if (marquee) return;
-        marqueeStart = { x: e.clientX, y: e.clientY };
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        marqueeStart = { x: canvasPos.x, y: canvasPos.y };
         marquee = document.createElement('div');
         marquee.className = 'marquee-selection';
         canvas.appendChild(marquee);
@@ -1415,11 +1851,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateMarquee(e) {
         if (!marquee || !marqueeStart) return;
+        const scale = getCanvasScale();
         const rect = canvas.getBoundingClientRect();
-        const x1 = Math.min(marqueeStart.x, e.clientX) - rect.left;
-        const y1 = Math.min(marqueeStart.y, e.clientY) - rect.top;
-        const x2 = Math.max(marqueeStart.x, e.clientX) - rect.left;
-        const y2 = Math.max(marqueeStart.y, e.clientY) - rect.top;
+        const curPos = screenToCanvas(e.clientX, e.clientY);
+        const x1 = Math.min(marqueeStart.x, curPos.x);
+        const y1 = Math.min(marqueeStart.y, curPos.y);
+        const x2 = Math.max(marqueeStart.x, curPos.x);
+        const y2 = Math.max(marqueeStart.y, curPos.y);
         marquee.style.left = x1 + 'px';
         marquee.style.top = y1 + 'px';
         marquee.style.width = (x2 - x1) + 'px';
@@ -1428,10 +1866,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const mRect = { left: x1, top: y1, right: x2, bottom: y2 };
         canvas.querySelectorAll('.element').forEach(el => {
             const elRect = el.getBoundingClientRect();
-            const ex1 = elRect.left - rect.left;
-            const ey1 = elRect.top - rect.top;
-            const ex2 = ex1 + elRect.width;
-            const ey2 = ey1 + elRect.height;
+            const ex1 = (elRect.left - rect.left) / scale;
+            const ey1 = (elRect.top - rect.top) / scale;
+            const ex2 = ex1 + elRect.width / scale;
+            const ey2 = ey1 + elRect.height / scale;
             const intersects = !(ex2 < mRect.left || ex1 > mRect.right || ey2 < mRect.top || ey1 > mRect.bottom);
             if (intersects) {
                 el.classList.add('element--selected');
@@ -1464,8 +1902,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resize(e) {
         if (!isResizing) return;
-        const newWidth = e.clientX - selectedElement.offsetLeft;
-        const newHeight = e.clientY - selectedElement.offsetTop;
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        const newWidth = canvasPos.x - selectedElement.offsetLeft;
+        const newHeight = canvasPos.y - selectedElement.offsetTop;
         selectedElement.style.width = `${newWidth}px`;
         selectedElement.style.height = `${newHeight}px`;
 
@@ -1489,6 +1928,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedEls.length < 2) return;
         const rects = selectedEls.map(el => el.getBoundingClientRect());
         const canvasRect = canvas.getBoundingClientRect();
+        const scale = getCanvasScale();
 
         if (mode === 'left' || mode === 'h-center' || mode === 'right') {
             const base = mode === 'left'
@@ -1502,7 +1942,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (mode === 'left') newLeft = base;
                 else if (mode === 'right') newLeft = base - r.width;
                 else newLeft = base - r.width / 2;
-                el.style.left = (newLeft - canvasRect.left) + 'px';
+                el.style.left = ((newLeft - canvasRect.left) / scale) + 'px';
             });
         } else if (mode === 'top' || mode === 'v-center' || mode === 'bottom') {
             const base = mode === 'top'
@@ -1516,7 +1956,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (mode === 'top') newTop = base;
                 else if (mode === 'bottom') newTop = base - r.height;
                 else newTop = base - r.height / 2;
-                el.style.top = (newTop - canvasRect.top) + 'px';
+                el.style.top = ((newTop - canvasRect.top) / scale) + 'px';
             });
         }
         if (typeof saveState === 'function' && canvas) saveState(canvas);
@@ -1528,6 +1968,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const rects = selectedEls.map(el => el.getBoundingClientRect());
         const canvasRect = canvas.getBoundingClientRect();
+        const scale = getCanvasScale();
         const minLeft = Math.min(...rects.map(r => r.left));
         const minTop = Math.min(...rects.map(r => r.top));
         const maxRight = Math.max(...rects.map(r => r.right));
@@ -1536,10 +1977,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const group = document.createElement('div');
         group.className = 'element group-element';
         group.style.position = 'absolute';
-        group.style.left = (minLeft - canvasRect.left) + 'px';
-        group.style.top = (minTop - canvasRect.top) + 'px';
-        group.style.width = (maxRight - minLeft) + 'px';
-        group.style.height = (maxBottom - minTop) + 'px';
+        group.style.left = ((minLeft - canvasRect.left) / scale) + 'px';
+        group.style.top = ((minTop - canvasRect.top) / scale) + 'px';
+        group.style.width = ((maxRight - minLeft) / scale) + 'px';
+        group.style.height = ((maxBottom - minTop) / scale) + 'px';
         group.style.background = 'transparent';
         group.style.border = '1px dashed rgba(0,0,0,0.2)';
         group.dataset.group = 'true';
@@ -1566,11 +2007,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = selectedElement;
         if (!target || !target.dataset.group) return;
         const canvasRect = canvas.getBoundingClientRect();
+        const scale = getCanvasScale();
         const children = Array.from(target.querySelectorAll('.element'));
         children.forEach(child => {
             const childRect = child.getBoundingClientRect();
-            const newLeft = childRect.left - canvasRect.left;
-            const newTop = childRect.top - canvasRect.top;
+            const newLeft = (childRect.left - canvasRect.left) / scale;
+            const newTop = (childRect.top - canvasRect.top) / scale;
             child.style.left = newLeft + 'px';
             child.style.top = newTop + 'px';
             canvas.appendChild(child);
@@ -2310,7 +2752,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Restore element animation (scale/move/rotate) as before
             if (el.dataset.elementAnimation) {
                 try {
-                    const { type, preset, duration } = JSON.parse(el.dataset.elementAnimation);
+                    const { type, preset, duration, startColor, endColor } = JSON.parse(el.dataset.elementAnimation);
                     if (elementAnimIntervals.has(uid)) {
                         clearInterval(elementAnimIntervals.get(uid));
                         elementAnimIntervals.delete(uid);
@@ -2368,6 +2810,37 @@ document.addEventListener('DOMContentLoaded', () => {
                                 translateX: el.dataset.translateX ? parseFloat(el.dataset.translateX) : undefined
                             });
                         }, 1000 * (parseFloat(duration) || 2) / 40);
+                    } else if (type === 'glow-pulse') {
+                        // Pulsating box-shadow glow
+                        let glowIntensity = 0, glowDir = 1;
+                        const glowColor = startColor || '#ff006e';
+                        intervalId = setInterval(() => {
+                            if (!document.body.contains(el)) {
+                                clearInterval(intervalId);
+                                elementAnimIntervals.delete(uid);
+                                return;
+                            }
+                            glowIntensity += glowDir * 3;
+                            if (glowIntensity > 100) glowDir = -1;
+                            if (glowIntensity < 0) glowDir = 1;
+                            const spread1 = Math.round(glowIntensity * 0.5);
+                            const spread2 = Math.round(glowIntensity * 1.0);
+                            el.style.boxShadow = `0 0 ${spread1}px ${glowColor}, 0 0 ${spread2}px ${glowColor}55`;
+                        }, 1000 * (parseFloat(duration) || 3) / 60);
+                    } else if (type === 'fade-pulse') {
+                        // Opacity breathing
+                        let fadeOpacity = 1, fadeDir = -1;
+                        intervalId = setInterval(() => {
+                            if (!document.body.contains(el)) {
+                                clearInterval(intervalId);
+                                elementAnimIntervals.delete(uid);
+                                return;
+                            }
+                            fadeOpacity += fadeDir * 0.03;
+                            if (fadeOpacity < 0.2) fadeDir = 1;
+                            if (fadeOpacity > 1) fadeDir = -1;
+                            el.style.opacity = fadeOpacity;
+                        }, 1000 * (parseFloat(duration) || 4) / 40);
                     }
                     if (intervalId) elementAnimIntervals.set(uid, intervalId);
                 } catch {}
@@ -2477,15 +2950,17 @@ document.addEventListener('DOMContentLoaded', () => {
         themePopup.style.display = 'none';
         themePopup.style.pointerEvents = 'none';
         themePopup.style.position = 'fixed';
-        themePopup.style.left = '50%';
-        themePopup.style.top = '50%';
-        themePopup.style.transform = 'translate(-50%, -50%)';
+        themePopup.style.left = '20px';
+        themePopup.style.top = '20px';
+        themePopup.style.transform = 'none';
         themePopup.style.background = '#fff';
         themePopup.style.border = '2px solid #888';
-        themePopup.style.borderRadius = '8px';
+        themePopup.style.borderRadius = '12px';
         themePopup.style.padding = '24px 16px 16px 16px';
         themePopup.style.zIndex = '10000';
         themePopup.style.minWidth = '320px';
+        themePopup.style.maxHeight = '80vh';
+        themePopup.style.overflowY = 'auto';
         themePopup.innerHTML = `
             <h2 id="theme-popup-title" style="margin-top:0">Select a Color Theme</h2>
             <div style="margin-bottom:8px;">
@@ -2515,6 +2990,9 @@ document.addEventListener('DOMContentLoaded', () => {
         themeBtn.focus();
     }
     themeBtn.addEventListener('click', openThemePopup);
+    // Also wire the advanced-panel Themes button
+    const themePanelBtn = document.getElementById('theme-panel-btn');
+    if (themePanelBtn) themePanelBtn.addEventListener('click', openThemePopup);
     themePopup.querySelector('#close-theme-popup').addEventListener('click', closeThemePopup);
     // Also close on Escape key
     themePopup.addEventListener('keydown', (e) => {
@@ -2524,7 +3002,7 @@ document.addEventListener('DOMContentLoaded', () => {
     themePopup.addEventListener('mousedown', (e) => e.stopPropagation());
     // Close popup when clicking outside
     document.addEventListener('mousedown', (e) => {
-        if (themePopup.style.display === 'block' && !themePopup.contains(e.target) && e.target !== themeBtn) {
+        if (themePopup.style.display === 'block' && !themePopup.contains(e.target) && e.target !== themeBtn && e.target !== themePanelBtn) {
             closeThemePopup();
         }
     });
@@ -2756,7 +3234,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function openTemplatesPopup() {
         const popup = document.createElement('div');
         popup.className = 'popup';
-        popup.style.zIndex = 15000;
+        popup.style.display = 'block';
+        popup.style.zIndex = '15000';
         popup.innerHTML = `
             <h3>Select a template</h3>
             <button data-template="filmStoryboard">Film storyboard</button>
@@ -2780,11 +3259,363 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function applyLibraryPreset(presetKey) {
+        const preset = elementLibraryPresets.find(p => p.key === presetKey);
+        if (!preset || !canvas) return;
+        const created = [];
+        preset.elements.forEach(item => {
+            const element = createElementFromManager(item.type);
+            applyLibraryElementStyles(element, item);
+            if (item.shapeColor) applyShapeColor(element, item.shapeColor, item.strokeWidth);
+            canvas.appendChild(element);
+            attachElementInteractions(element);
+            created.push(element);
+        });
+        if (created.length) setSelectedElement(created[0]);
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
+    function applyLibraryElementStyles(element, item) {
+        if (!element || !item) return;
+        const cw = canvasDesignWidth || 1920;
+        const ch = canvasDesignHeight || 1080;
+        const left = typeof item.x === 'number' ? Math.round((item.x / 100) * cw) : 80;
+        const top = typeof item.y === 'number' ? Math.round((item.y / 100) * ch) : 80;
+        const width = typeof item.w === 'number' ? Math.round((item.w / 100) * cw) : 320;
+        const height = typeof item.h === 'number' ? Math.round((item.h / 100) * ch) : 140;
+
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
+
+        if (typeof item.opacity === 'number') element.style.opacity = String(item.opacity);
+        if (item.backgroundColor !== undefined) element.style.backgroundColor = item.backgroundColor;
+        if (item.color) element.style.color = item.color;
+        if (item.fontSize) element.style.fontSize = item.fontSize;
+        if (item.fontFamily) element.style.fontFamily = item.fontFamily;
+        if (item.fontWeight) element.style.fontWeight = item.fontWeight;
+        if (item.textAlign) element.style.textAlign = item.textAlign;
+        if (item.border) element.style.border = item.border;
+        if (item.borderColor) element.style.borderColor = item.borderColor;
+        if (item.borderRadius) element.style.borderRadius = item.borderRadius;
+        if (item.boxShadow) element.style.boxShadow = item.boxShadow;
+        if (item.transform) element.style.transform = item.transform;
+        if (item.transformOrigin) element.style.transformOrigin = item.transformOrigin;
+        if (item.display) element.style.display = item.display;
+        if (item.alignItems) element.style.alignItems = item.alignItems;
+        if (item.justifyContent) element.style.justifyContent = item.justifyContent;
+        if (item.overflow) element.style.overflow = item.overflow;
+        if (item.backdropFilter) element.style.backdropFilter = item.backdropFilter;
+        if (item.webkitBackdropFilter) element.style.webkitBackdropFilter = item.webkitBackdropFilter;
+        if (item.filter) element.style.filter = item.filter;
+        if (item.zIndex) element.style.zIndex = String(item.zIndex);
+
+        if (item.text) {
+            const target = element.querySelector('h2, p, button');
+            if (target) target.textContent = item.text;
+        }
+    }
+
+    function applyShapeColor(element, color, strokeWidth) {
+        if (!element || !color) return;
+        const rect = element.querySelector('rect');
+        const circle = element.querySelector('circle');
+        const polygon = element.querySelector('polygon');
+        const line = element.querySelector('line');
+        if (rect) rect.setAttribute('fill', color);
+        if (circle) circle.setAttribute('fill', color);
+        if (polygon) polygon.setAttribute('fill', color);
+        if (line) {
+            line.setAttribute('stroke', color);
+            if (strokeWidth) line.setAttribute('stroke-width', String(strokeWidth));
+        }
+    }
+
+    function openElementLibraryPopup() {
+        const popup = document.createElement('div');
+        popup.className = 'popup library-popup';
+        popup.style.display = 'block';
+        popup.style.zIndex = '15000';
+        const cards = elementLibraryPresets.map(p => `
+            <button class="library-card" data-library="${p.key}">
+                <span class="lib-title">${p.name}</span>
+                <span class="lib-desc">${p.desc}</span>
+            </button>
+        `).join('');
+        popup.innerHTML = `
+            <div class="library-header">
+                <h3>Element Library</h3>
+                <p>Insert a preset block into the current frame.</p>
+            </div>
+            <div class="library-grid">${cards}</div>
+            <div class="library-actions">
+                <button class="cancel-btn" type="button">Close</button>
+            </div>
+        `;
+        document.body.appendChild(popup);
+        popup.addEventListener('click', (e) => {
+            const closeBtn = e.target.closest('.cancel-btn');
+            if (closeBtn) {
+                document.body.removeChild(popup);
+                return;
+            }
+            const card = e.target.closest('[data-library]');
+            if (!card) return;
+            const key = card.getAttribute('data-library');
+            if (key) applyLibraryPreset(key);
+        });
+    }
+
+    function openResizePopup() {
+        const popup = document.createElement('div');
+        popup.className = 'popup';
+        popup.style.display = 'block';
+        popup.style.zIndex = '15000';
+        popup.innerHTML = `
+            <h3>Smart Resize</h3>
+            <label for="resize-preset">Aspect ratio preset</label>
+            <select id="resize-preset">
+                <option value="1920x1080">16:9 (1920 x 1080)</option>
+                <option value="1080x1920">9:16 (1080 x 1920)</option>
+                <option value="1440x1080">4:3 (1440 x 1080)</option>
+                <option value="1080x1080">1:1 (1080 x 1080)</option>
+            </select>
+            <label for="resize-width">Width</label>
+            <input id="resize-width" type="number" min="320" max="3840" value="${canvasDesignWidth || 1920}">
+            <label for="resize-height">Height</label>
+            <input id="resize-height" type="number" min="320" max="3840" value="${canvasDesignHeight || 1080}">
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                <button id="resize-apply-btn">Apply</button>
+                <button class="cancel-btn" type="button">Cancel</button>
+            </div>
+        `;
+        document.body.appendChild(popup);
+        const presetSelect = popup.querySelector('#resize-preset');
+        const widthInput = popup.querySelector('#resize-width');
+        const heightInput = popup.querySelector('#resize-height');
+        const applyBtn = popup.querySelector('#resize-apply-btn');
+
+        if (presetSelect) {
+            presetSelect.addEventListener('change', () => {
+                const [w, h] = presetSelect.value.split('x').map(n => parseInt(n, 10));
+                if (!isNaN(w) && widthInput) widthInput.value = String(w);
+                if (!isNaN(h) && heightInput) heightInput.value = String(h);
+            });
+        }
+
+        popup.addEventListener('click', (e) => {
+            const cancel = e.target.closest('.cancel-btn');
+            if (cancel) {
+                document.body.removeChild(popup);
+            }
+        });
+
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                const w = parseInt(widthInput && widthInput.value, 10);
+                const h = parseInt(heightInput && heightInput.value, 10);
+                if (!isNaN(w) && !isNaN(h)) {
+                    smartResizeCanvas(w, h);
+                    document.body.removeChild(popup);
+                }
+            });
+        }
+    }
+
+    const variationState = {
+        density: 'maximal',
+        symmetry: 'asym',
+        motion: 'energetic',
+        contrast: 'high',
+        palette: 'vivid',
+        typography: 'mixed'
+    };
+
+    function openVariationPopup() {
+        const popup = document.createElement('div');
+        popup.className = 'popup';
+        popup.style.display = 'block';
+        popup.style.zIndex = '15000';
+        popup.innerHTML = `
+            <h3>Variation Settings</h3>
+            <div class="variation-grid">
+                <div class="variation-row">
+                    <label for="var-density">Layout density</label>
+                    <select id="var-density">
+                        <option value="sparse">Sparse</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="maximal">Maximal</option>
+                    </select>
+                </div>
+                <div class="variation-row">
+                    <label for="var-symmetry">Symmetry</label>
+                    <select id="var-symmetry">
+                        <option value="centered">Centered</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="asym">Asymmetric</option>
+                    </select>
+                </div>
+                <div class="variation-row">
+                    <label for="var-motion">Motion intensity</label>
+                    <select id="var-motion">
+                        <option value="subtle">Subtle</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="energetic">Energetic</option>
+                    </select>
+                </div>
+                <div class="variation-row">
+                    <label for="var-contrast">Contrast</label>
+                    <select id="var-contrast">
+                        <option value="soft">Soft</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="variation-row">
+                    <label for="var-palette">Palette</label>
+                    <select id="var-palette">
+                        <option value="muted">Muted</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="vivid">Vivid</option>
+                    </select>
+                </div>
+                <div class="variation-row">
+                    <label for="var-typography">Typography</label>
+                    <select id="var-typography">
+                        <option value="serif">Serif</option>
+                        <option value="sans">Sans</option>
+                        <option value="display">Display</option>
+                        <option value="mixed">Mixed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="variation-actions">
+                <button id="var-apply-btn" type="button">Apply</button>
+                <button class="cancel-btn" type="button">Close</button>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        const density = popup.querySelector('#var-density');
+        const symmetry = popup.querySelector('#var-symmetry');
+        const motion = popup.querySelector('#var-motion');
+        const contrast = popup.querySelector('#var-contrast');
+        const palette = popup.querySelector('#var-palette');
+        const typography = popup.querySelector('#var-typography');
+
+        if (density) density.value = variationState.density;
+        if (symmetry) symmetry.value = variationState.symmetry;
+        if (motion) motion.value = variationState.motion;
+        if (contrast) contrast.value = variationState.contrast;
+        if (palette) palette.value = variationState.palette;
+        if (typography) typography.value = variationState.typography;
+
+        const applyBtn = popup.querySelector('#var-apply-btn');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                if (density) variationState.density = density.value;
+                if (symmetry) variationState.symmetry = symmetry.value;
+                if (motion) variationState.motion = motion.value;
+                if (contrast) variationState.contrast = contrast.value;
+                if (palette) variationState.palette = palette.value;
+                if (typography) variationState.typography = typography.value;
+                document.body.removeChild(popup);
+            });
+        }
+
+        popup.addEventListener('click', (e) => {
+            const cancel = e.target.closest('.cancel-btn');
+            if (cancel) document.body.removeChild(popup);
+        });
+    }
+
+    function buildVariationPrompt() {
+        return [
+            'DESIGN VARIATION SETTINGS:',
+            `- Density: ${variationState.density}`,
+            `- Symmetry: ${variationState.symmetry}`,
+            `- Motion: ${variationState.motion}`,
+            `- Contrast: ${variationState.contrast}`,
+            `- Palette: ${variationState.palette}`,
+            `- Typography: ${variationState.typography}`,
+            'Use these as strong guidance unless they conflict with the sign\'s purpose.'
+        ].join('\n');
+    }
+
+    function smartResizeCanvas(targetW, targetH) {
+        if (!canvas) return;
+        const oldW = canvasDesignWidth || 1920;
+        const oldH = canvasDesignHeight || 1080;
+        if (!oldW || !oldH) return;
+        const scaleX = targetW / oldW;
+        const scaleY = targetH / oldH;
+        const scaleMin = Math.min(scaleX, scaleY);
+
+        const elements = Array.from(canvas.querySelectorAll('.element'));
+        elements.forEach(el => {
+            const x = parseFloat(el.style.left) || 0;
+            const y = parseFloat(el.style.top) || 0;
+            const w = parseFloat(el.style.width) || 100;
+            const h = parseFloat(el.style.height) || 50;
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+
+            const anchorX = cx < oldW * 0.33 ? 'left' : cx > oldW * 0.66 ? 'right' : 'center';
+            const anchorY = cy < oldH * 0.33 ? 'top' : cy > oldH * 0.66 ? 'bottom' : 'middle';
+
+            const newW = Math.round(w * scaleMin);
+            const newH = Math.round(h * scaleMin);
+            let newX;
+            let newY;
+
+            if (anchorX === 'left') {
+                newX = Math.round((x / oldW) * targetW);
+            } else if (anchorX === 'right') {
+                const distRight = oldW - (x + w);
+                newX = Math.round(targetW - (distRight * scaleMin) - newW);
+            } else {
+                newX = Math.round((cx / oldW) * targetW - newW / 2);
+            }
+
+            if (anchorY === 'top') {
+                newY = Math.round((y / oldH) * targetH);
+            } else if (anchorY === 'bottom') {
+                const distBottom = oldH - (y + h);
+                newY = Math.round(targetH - (distBottom * scaleMin) - newH);
+            } else {
+                newY = Math.round((cy / oldH) * targetH - newH / 2);
+            }
+
+            newX = Math.max(0, Math.min(targetW - newW, newX));
+            newY = Math.max(0, Math.min(targetH - newH, newY));
+
+            el.style.left = `${newX}px`;
+            el.style.top = `${newY}px`;
+            el.style.width = `${newW}px`;
+            el.style.height = `${newH}px`;
+
+            const fontSize = parseFloat(el.style.fontSize);
+            if (!isNaN(fontSize)) {
+                el.style.fontSize = `${Math.max(10, Math.round(fontSize * scaleMin))}px`;
+            }
+            if (el.style.borderRadius && el.style.borderRadius.endsWith('px')) {
+                const br = parseFloat(el.style.borderRadius);
+                if (!isNaN(br)) {
+                    el.style.borderRadius = `${Math.max(0, Math.round(br * scaleMin))}px`;
+                }
+            }
+        });
+
+        setCanvasDesignSize(targetW, targetH);
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
     // Restore event listeners for load, clear, and export buttons
     if (loadBtn) {
         loadBtn.addEventListener('click', () => {
             fileInput.click();
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         });
         // Restore all dataset attributes on import
         fileInput.addEventListener('change', (event) => {
@@ -2839,7 +3670,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     clearState(canvas, colorTransitionIntervals, gradientAnimIntervals);
                 }
                 canvas.innerHTML = '';
-                if (typeof saveState === 'function' && canvas) saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             }
         });
     }
@@ -2930,7 +3761,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedElement.style.background = '';
             // Start and restore animation using modular logic
             restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
         closeColorTransitionPopup();
     });
@@ -2983,7 +3814,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedElement.style.backgroundColor = '';
             // Start and restore animation using modular logic
             restoreElementAnimation(selectedElement, animationState, { color: colorTransitionIntervals, gradient: gradientAnimIntervals }, uid);
-            if (typeof saveState === 'function' && canvas) saveState();
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
         closeColorGradientPopup();
     });
@@ -3022,7 +3853,7 @@ document.addEventListener('DOMContentLoaded', () => {
             picker.addEventListener('input', (e) => {
                 canvas.style.background = e.target.value;
                 document.body.removeChild(picker);
-                if (typeof saveState === 'function' && canvas) saveState();
+                if (typeof saveState === 'function' && canvas) saveState(canvas);
             });
             picker.addEventListener('blur', () => {
                 if (document.body.contains(picker)) document.body.removeChild(picker);
@@ -3098,4 +3929,452 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof saveState === 'function' && canvas) saveState(canvas);
         }
     });
+
+    // ═══════════════════════════════════════════════════════════════
+    // GENERATE SIGN (AI) — conversational 2-pass flow
+    // ═══════════════════════════════════════════════════════════════
+
+    const gsPanel     = document.getElementById('generate-sign-panel');
+    const gsChat      = document.getElementById('gs-chat');
+    const gsInput     = document.getElementById('gs-input');
+    const gsSendBtn   = document.getElementById('gs-send-btn');
+    const gsMicBtn    = document.getElementById('gs-mic-btn');
+    const gsCloseBtn  = document.getElementById('gs-close-btn');
+    const gsStatus    = document.getElementById('gs-status');
+    const generateSignBtn = document.getElementById('generate-sign-btn');
+    const gsModeReplace = document.getElementById('gs-mode-replace');
+    const gsModeAdd     = document.getElementById('gs-mode-add');
+
+    // Conversation state machine: idle → describing → clarifying → generating → done
+    let gsState = 'idle';
+    let gsUserDescription = '';
+    let gsClarifyQuestions = [];
+    let gsClarifyAnswers = [];
+    let gsInsertMode = 'replace'; // 'replace' | 'add'
+
+    // Mode toggle wiring
+    if (gsModeReplace) gsModeReplace.addEventListener('click', () => {
+        gsInsertMode = 'replace';
+        gsModeReplace.classList.add('gs-mode-btn--active');
+        gsModeAdd?.classList.remove('gs-mode-btn--active');
+    });
+    if (gsModeAdd) gsModeAdd.addEventListener('click', () => {
+        gsInsertMode = 'add';
+        gsModeAdd.classList.add('gs-mode-btn--active');
+        gsModeReplace?.classList.remove('gs-mode-btn--active');
+    });
+
+    // ── Helpers ──
+
+    function gsAddMsg(text, role = 'ai') {
+        if (!gsChat) return;
+        const div = document.createElement('div');
+        div.className = `gs-msg gs-msg--${role}`;
+        if (role === 'status') {
+            div.textContent = text;
+        } else {
+            const p = document.createElement('p');
+            p.textContent = text;
+            div.appendChild(p);
+        }
+        gsChat.appendChild(div);
+        gsChat.scrollTop = gsChat.scrollHeight;
+        return div;
+    }
+
+    function gsAddLoading() {
+        const div = document.createElement('div');
+        div.className = 'gs-msg gs-msg--ai gs-loading-msg';
+        div.innerHTML = '<div class="gs-loading"><span></span><span></span><span></span></div>';
+        gsChat?.appendChild(div);
+        gsChat.scrollTop = gsChat.scrollHeight;
+        return div;
+    }
+
+    function gsRemoveLoading() {
+        gsChat?.querySelector('.gs-loading-msg')?.remove();
+    }
+
+    function gsSetInputEnabled(enabled) {
+        if (gsInput) gsInput.disabled = !enabled;
+        if (gsSendBtn) gsSendBtn.disabled = !enabled;
+    }
+
+    function gsReset() {
+        gsState = 'idle';
+        gsUserDescription = '';
+        gsClarifyQuestions = [];
+        gsClarifyAnswers = [];
+        if (gsChat) {
+            gsChat.innerHTML = '';
+            gsAddMsg('Describe the signage you need \u2014 no sign-in, just results.');
+        }
+        gsSetInputEnabled(true);
+        if (gsInput) { gsInput.value = ''; gsInput.placeholder = 'e.g. Quick welcome signage for our school open house'; }
+        if (gsStatus) gsStatus.textContent = '';
+    }
+
+    // ── API call through proxy ──
+
+    async function gsCallAPI(messages, { model, temperature, maxTokens } = {}) {
+        const proxyUrl = getProxyUrl();
+        const resp = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: model || MODEL,
+                temperature: temperature ?? 0.7,
+                max_tokens: maxTokens || 4096,
+                messages,
+            }),
+        });
+        if (!resp.ok) {
+            const errText = await resp.text();
+            throw new Error(`API ${resp.status}: ${errText.slice(0, 200)}`);
+        }
+        const data = await resp.json();
+        // Support both proxy-forwarded OpenAI shape and raw content
+        const content = data.choices?.[0]?.message?.content || data.content || '';
+        return content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    }
+
+    // ── Pass 1: Send description, get clarifying questions ──
+
+    async function gsPass1(description) {
+        gsState = 'clarifying';
+        gsUserDescription = description;
+        gsAddMsg(description, 'user');
+        gsSetInputEnabled(false);
+        const loadingEl = gsAddLoading();
+
+        try {
+            const raw = await gsCallAPI([
+                { role: 'system', content: CLARIFY_SYSTEM_PROMPT },
+                { role: 'user',   content: description },
+            ]);
+
+            gsRemoveLoading();
+            let parsed;
+            try { parsed = JSON.parse(raw); } catch { throw new Error('Couldn\u2019t understand the response. Try again.'); }
+
+            gsClarifyQuestions = Array.isArray(parsed.questions) ? parsed.questions.slice(0, 3) : [];
+            if (gsClarifyQuestions.length === 0) throw new Error('No questions received. Try again.');
+
+            gsClarifyAnswers = new Array(gsClarifyQuestions.length).fill('');
+            gsRenderQuestions();
+
+        } catch (err) {
+            gsRemoveLoading();
+            gsAddMsg('Error: ' + err.message, 'status');
+            gsState = 'idle';
+            gsSetInputEnabled(true);
+        }
+    }
+
+    // ── Render clarifying questions as interactive form ──
+
+    function gsRenderQuestions() {
+        const container = document.createElement('div');
+        container.className = 'gs-msg gs-msg--ai';
+
+        const intro = document.createElement('p');
+        intro.textContent = 'A few quick questions to nail the design:';
+        container.appendChild(intro);
+
+        const qDiv = document.createElement('div');
+        qDiv.className = 'gs-questions';
+
+        gsClarifyQuestions.forEach((q, idx) => {
+            const label = document.createElement('label');
+            label.className = 'gs-q-btn';
+            label.textContent = `${idx + 1}. ${q}`;
+            qDiv.appendChild(label);
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'gs-q-answer-input';
+            input.placeholder = 'Your answer\u2026';
+            input.dataset.qidx = idx;
+            input.addEventListener('input', () => {
+                gsClarifyAnswers[idx] = input.value;
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Focus next unanswered, or submit if last
+                    const nextInput = qDiv.querySelector(`input[data-qidx="${idx + 1}"]`);
+                    if (nextInput) nextInput.focus();
+                    else gsSubmitAnswers();
+                }
+            });
+            qDiv.appendChild(input);
+        });
+
+        container.appendChild(qDiv);
+
+        const submitRow = document.createElement('div');
+        submitRow.className = 'gs-q-submit-row';
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'gs-q-submit-btn';
+        submitBtn.textContent = 'Make My Sign';
+        submitBtn.addEventListener('click', gsSubmitAnswers);
+        submitRow.appendChild(submitBtn);
+        container.appendChild(submitRow);
+
+        gsChat?.appendChild(container);
+        gsChat.scrollTop = gsChat.scrollHeight;
+
+        // Focus first answer
+        const firstInput = qDiv.querySelector('input');
+        if (firstInput) setTimeout(() => firstInput.focus(), 100);
+    }
+
+    // ── Pass 2: Send everything, generate the sign ──
+
+    async function gsSubmitAnswers() {
+        // Check that at least one answer is non-empty
+        const hasAny = gsClarifyAnswers.some(a => a.trim());
+        if (!hasAny) {
+            gsAddMsg('Please answer at least one question.', 'status');
+            return;
+        }
+
+        gsState = 'generating';
+        // Disable all question inputs
+        gsChat?.querySelectorAll('.gs-q-answer-input').forEach(inp => { inp.disabled = true; });
+        gsChat?.querySelectorAll('.gs-q-submit-btn').forEach(btn => { btn.disabled = true; });
+
+        // Build answers summary as user message
+        const answerLines = gsClarifyQuestions.map((q, i) => {
+            const a = (gsClarifyAnswers[i] || '').trim() || '(no answer)';
+            return `Q: ${q}\nA: ${a}`;
+        }).join('\n\n');
+
+        gsAddMsg(answerLines, 'user');
+        const loadingEl = gsAddLoading();
+
+        try {
+            // Use creative boost wrapper + generation model at high temperature
+            const variationNotes = buildVariationPrompt();
+            const boostedUserContent = wrapUserPrompt(gsUserDescription, `${answerLines}\n\n${variationNotes}`);
+            const raw = await gsCallAPI([
+                { role: 'system',    content: GENERATE_SYSTEM_PROMPT },
+                { role: 'user',      content: boostedUserContent },
+            ], { model: GENERATION_MODEL, temperature: 1.1, maxTokens: 4096 });
+
+            gsRemoveLoading();
+
+            // Import via the v2 pipeline — always use 1920×1080 base for consistent layout
+            const result = importSignageV2(raw, 1920, 1080);
+
+            if (!result.success) {
+                gsAddMsg('Generation failed: ' + (result.errors.join('; ') || 'Invalid output. Try again.'), 'status');
+                gsState = 'idle';
+                gsSetInputEnabled(true);
+                return;
+            }
+
+            // Apply to canvas — respect insert mode
+            const isReplace = gsInsertMode === 'replace';
+            if (isReplace) {
+                // Save current frame before wiping
+                frames = [];
+            } else {
+                // Save current canvas state into current frame before appending
+                if (frames.length > 0) {
+                    frames[currentFrameIndex] = snapshotCurrentCanvas();
+                }
+            }
+
+            const startFrameIdx = isReplace ? 0 : frames.length;
+
+            result.frames.forEach((renderedFrame, idx) => {
+                const isFirstVisible = (isReplace && idx === 0);
+                if (isFirstVisible) {
+                    canvas.innerHTML = '<div id="grid" class="grid"></div>';
+                    canvas.style.background = renderedFrame.background;
+                }
+
+                const frameElements = renderedFrame.domElements.map(domEl => {
+                    if (isFirstVisible) {
+                        canvas.appendChild(domEl);
+                        attachElementInteractions(domEl);
+                    }
+                    return {
+                        type: domEl.getAttribute('data-type'),
+                        left: domEl.style.left,
+                        top: domEl.style.top,
+                        width: domEl.style.width,
+                        height: domEl.style.height,
+                        backgroundColor: domEl.style.backgroundColor,
+                        color: domEl.style.color,
+                        fontSize: domEl.style.fontSize,
+                        fontFamily: domEl.style.fontFamily,
+                        zIndex: domEl.style.zIndex || '2',
+                        border: domEl.style.border,
+                        borderColor: domEl.style.borderColor,
+                        rotation: 0,
+                        innerHTML: domEl.innerHTML,
+                        dataset: { ...domEl.dataset },
+                    };
+                });
+
+                frames.push({
+                    elements: frameElements,
+                    canvas: {
+                        background: renderedFrame.background,
+                        width: (renderedFrame.canvasWidth || 1920) + 'px',
+                        height: (renderedFrame.canvasHeight || 1080) + 'px',
+                    },
+                    duration: renderedFrame.duration || 15,
+                });
+            });
+
+            // Apply canvas dimensions from the first generated frame
+            const firstFrame = result.frames[0];
+            if (firstFrame) {
+                setCanvasDesignSize(firstFrame.canvasWidth || 1920, firstFrame.canvasHeight || 1080);
+            }
+
+            currentFrameIndex = startFrameIdx;
+            if (!isReplace && startFrameIdx > 0) {
+                // Load the first newly-added frame
+                loadFrame(currentFrameIndex);
+            }
+            reattachEventListeners();
+            updateFrameLabel();
+            restoreElementAnimations();
+
+            // (center-of-weight removed — user can pan in fullscreen)
+
+            if (typeof saveState === 'function' && canvas) saveState(canvas);
+
+            const addedCount = result.frames.length;
+            const totalCount = frames.length;
+            const msg = isReplace
+                ? `Signage created — ${addedCount} frame(s).`
+                : `Added ${addedCount} frame(s) — ${totalCount} total.`;
+            gsAddMsg(msg, 'status');
+            gsState = 'done';
+
+            // Auto-enter play mode for multi-frame signs
+            if (frames.length > 1 && typeof enterPlayMode === 'function') {
+                enterPlayMode();
+            }
+
+            // Auto close after a beat
+            setTimeout(() => {
+                if (gsPanel) gsPanel.style.display = 'none';
+                gsReset();
+            }, 1800);
+
+        } catch (err) {
+            gsRemoveLoading();
+            gsAddMsg('Error: ' + (err.message || 'Unknown error'), 'status');
+            gsState = 'idle';
+            gsSetInputEnabled(true);
+        }
+    }
+
+    // ── Send handler (initial description) ──
+
+    function gsSendMessage() {
+        const text = (gsInput?.value || '').trim();
+        if (!text) return;
+        gsInput.value = '';
+
+        if (gsState === 'idle') {
+            gsPass1(text);
+        }
+        // In clarifying state, ignore text input (user answers inline)
+    }
+
+    if (gsSendBtn) gsSendBtn.addEventListener('click', gsSendMessage);
+    if (gsInput) {
+        gsInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); gsSendMessage(); }
+        });
+    }
+
+    // ── Open / Close ──
+
+    if (generateSignBtn) {
+        generateSignBtn.addEventListener('click', () => {
+            if (!gsPanel) return;
+            gsReset();
+            gsPanel.style.display = 'flex';
+            setTimeout(() => gsInput?.focus(), 150);
+        });
+    }
+    if (gsCloseBtn) {
+        gsCloseBtn.addEventListener('click', () => {
+            if (gsPanel) gsPanel.style.display = 'none';
+            gsReset();
+        });
+    }
+
+    // ── Voice input (Web Speech API) ──
+
+    let gsRecognition = null;
+    let gsIsListening = false;
+
+    function gsInitSpeech() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            // No browser support — hide mic button
+            if (gsMicBtn) gsMicBtn.style.display = 'none';
+            return;
+        }
+
+        gsRecognition = new SpeechRecognition();
+        gsRecognition.lang = 'en-US';
+        gsRecognition.interimResults = true;
+        gsRecognition.maxAlternatives = 1;
+
+        gsRecognition.addEventListener('result', (e) => {
+            const transcript = Array.from(e.results)
+                .map(r => r[0].transcript)
+                .join('');
+            if (gsInput) gsInput.value = transcript;
+
+            // If final result, auto-send
+            if (e.results[e.results.length - 1].isFinal) {
+                gsStopListening();
+                gsSendMessage();
+            }
+        });
+
+        gsRecognition.addEventListener('end', () => {
+            gsStopListening();
+        });
+
+        gsRecognition.addEventListener('error', (e) => {
+            gsStopListening();
+            if (e.error !== 'aborted' && e.error !== 'no-speech') {
+                gsAddMsg('Mic error: ' + e.error, 'status');
+            }
+        });
+    }
+
+    function gsStartListening() {
+        if (!gsRecognition || gsIsListening) return;
+        gsIsListening = true;
+        gsMicBtn?.classList.add('gs-mic-active');
+        try { gsRecognition.start(); } catch { /* already started */ }
+    }
+
+    function gsStopListening() {
+        gsIsListening = false;
+        gsMicBtn?.classList.remove('gs-mic-active');
+        try { gsRecognition?.stop(); } catch { /* already stopped */ }
+    }
+
+    if (gsMicBtn) {
+        gsMicBtn.addEventListener('click', () => {
+            if (gsIsListening) gsStopListening();
+            else gsStartListening();
+        });
+    }
+
+    gsInitSpeech();
 });
