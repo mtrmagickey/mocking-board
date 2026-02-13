@@ -347,9 +347,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function clearDemoOnEdit() {
+        if (!demoModeActive) return;
+        demoModeActive = false;
+        frames = [
+            {
+                elements: [],
+                canvas: {
+                    background: '',
+                    width: `${canvasDesignWidth}px`,
+                    height: `${canvasDesignHeight}px`
+                },
+                duration: DEFAULT_FRAME_DURATION
+            }
+        ];
+        currentFrameIndex = 0;
+        savedProjectThemeIndex = null;
+        loadFrame(0);
+        if (typeof saveState === 'function' && canvas) saveState(canvas);
+    }
+
     function setEditMode(active) {
         const bodyEl = document.body;
         if (!bodyEl) return;
+        if (active) clearDemoOnEdit();
         bodyEl.classList.toggle('edit-mode', active);
         if (editModeBtn) {
             const label = editModeBtn.querySelector('.hero-fab-label');
@@ -1242,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showSplashIfNeeded();
     }
 
+    let demoModeActive = false;
     function loadDemoProject() {
         if (!window.fetch) return null;
         return fetch('Mocking-Board-Demo.json')
@@ -1250,7 +1272,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return resp.json();
             })
             .then((imported) => {
-                applyImportedData(imported, { alertOnSuccess: false });
+                if (applyImportedData(imported, { alertOnSuccess: false })) {
+                    demoModeActive = true;
+                }
             })
             .catch(() => {
                 // Ignore demo load failures and fall back to empty canvas.
