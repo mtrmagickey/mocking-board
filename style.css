@@ -1310,13 +1310,175 @@ body.signage-mode-active .hero-fab--advanced { display: none; }
     background: #94a3b8;
     animation: gs-bounce 1.2s ease-in-out infinite;
     opacity: 0.88;
-        scale: 0.95;
-.toolbar-group:hover,
-.toolbar-group:focus-within {
-    opacity: 1;
+    scale: 0.95;
+}
+
+@keyframes gs-bounce {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: 0.7;
     }
+    50% {
+        transform: translateY(-6px);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 1024px) {
+    .app-container {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        flex: 0 0 auto;
+        border-radius: 0 0 18px 18px;
+        max-height: 45vh;
+    }
+
+    .sidebar [role="group"] {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 8px;
+        padding: 10px 12px 16px;
+    }
+
+    .sidebar .element-button {
+        width: 100%;
+        margin: 0;
+    }
+
+    .app-brand {
+        padding: 12px 14px 4px;
+        font-size: 16px;
+    }
+
+    .canvas-container {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .toolbar {
+        top: auto;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .toolbar-group {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .frame-bar {
+        left: 12px;
+        right: 12px;
+        bottom: 140px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .advanced-panel {
+        left: 12px;
+        right: 12px;
+        top: auto;
+        bottom: 140px;
+        max-height: 45vh;
+        overflow-y: auto;
+    }
+
     .hero-fab--generate {
-        padding: 14px 28px;
+        bottom: 90px;
+    }
+
+    .widget {
+        display: none;
+    }
+}
+
+@media (max-width: 720px) {
+    .hero-fab {
+        font-size: 12px;
+    }
+
+    .hero-fab--generate {
+        padding: 12px 18px;
+        font-size: 13px;
+        bottom: 110px;
+    }
+
+    .hero-fab--present,
+    .hero-fab--edit,
+    .hero-fab--advanced {
+        right: 12px;
+        padding: 10px 14px;
+        font-size: 12px;
+    }
+
+    .hero-fab--present {
+        top: 12px;
+    }
+
+    .hero-fab--edit {
+        top: 52px;
+    }
+
+    .hero-fab--advanced {
+        top: 92px;
+    }
+
+    .gs-panel {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-height: 70vh;
+    }
+
+    .gs-chat {
+        max-height: 40vh;
+    }
+
+    .popup {
+        width: min(92vw, 420px);
+    }
+
+    .signage-exit-btn {
+        left: 12px;
+        bottom: 12px;
+    }
+}
+
+@media (pointer: coarse) {
+    .element-button {
+        min-height: 44px;
+        padding: 12px 14px;
+    }
+
+    .toolbar button {
+        min-height: 44px;
+        padding: 10px 16px;
         font-size: 14px;
+    }
+
+    .frame-bar button,
+    .advanced-panel button {
+        min-height: 44px;
+        padding: 10px 14px;
+        font-size: 12px;
+    }
+
+    .context-menu button {
+        min-height: 44px;
+        padding: 10px 12px;
+    }
+
+    .gs-mic-btn,
+    .gs-send-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
     }
 }
